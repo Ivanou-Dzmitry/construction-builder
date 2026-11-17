@@ -111,7 +111,7 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | Height / Length / Width (Min/Max) | Box size ranges, m | 0.5-2 / 1-2 / 0.4-1 |
 | One Material | On export every object gets the single material `CB_Building` with the ID mask, so the FBX and Substance have one texture set. The group materials come back afterwards | on |
 | Single Mesh | Bake the whole building into one mesh `CB_Building` with one material and one UV, which is easier to texture | off |
-| UV Margin | Gap between UV islands in the tile (shrinks by itself when there are very many islands) | 0.01 |
+| UV Margin | Gap between UV islands in the tile (shrinks by itself when there are very many islands) | 0.005 |
 | Split Slabs | Cut the UVs of the slabs into pieces (see Cut Size) instead of one huge island per floor. Identical pieces stack on each other, so the slabs take little space and the rest of the building gets a bigger scale. The slab texture then repeats every piece | on |
 | Cut Size | Size of a slab piece in modules: 3 = 3 x 3 modules (9 x 9 m with 3 m modules). Smaller pieces save more space but repeat the texture more often | 3 |
 | Group by Material | Split the UV islands into groups (concrete, floors, ceilings, debris, formwork, railings, beams, lamps): only islands of one group stack, and every group has its own colour in the ID mask | on |

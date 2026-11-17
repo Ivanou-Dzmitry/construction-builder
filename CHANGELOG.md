@@ -4,6 +4,16 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.20.1
+
+**English**
+
+* The default `UV Margin` is 0.005 (was 0.01): islands sit closer, the scale grows (9 x 5 x 6 building: 0.0301 -> 0.0333 tile per metre, +11%). On a tall building the scale is capped by the tallest island (a column over all floors, 39 m on 12 floors), so a smaller gap gives only +4% there.
+
+**Русский**
+
+* `UV Margin` по умолчанию 0.005 (было 0.01): островки лежат ближе, масштаб растёт (здание 9 x 5 x 6: 0.0301 -> 0.0333 тайла на метр, +11%). У высокого здания масштаб ограничен самым высоким островком (колонна на все этажи, 39 м на 12 этажах), поэтому там меньший зазор даёт только +4%.
+
 ## 0.20.0
 
 **English**

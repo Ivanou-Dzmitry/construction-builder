@@ -572,7 +572,7 @@ class CB_Props(bpy.types.PropertyGroup):
     uv_margin: FloatProperty(
         name="UV Margin",
         description="Gap between packed UV islands",
-        default=0.01,
+        default=0.005,
         min=0.0,
         max=0.2,
         precision=3,
