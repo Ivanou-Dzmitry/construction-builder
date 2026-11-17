@@ -4,6 +4,16 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.21.0
+
+**English**
+
+* **Cut Height** (`Cut Height`, 30 m by default, 0 = off): the UVs of tall objects, first of all the columns over all floors, are cut every 30 m. A very tall island (39 m on 12 floors) used to limit the scale of the whole tile and left a free strip at the top. A building lower than 30 m (up to 9 floors of 3 m) is not cut at all, nothing changes for it (bit-for-bit comparison, 45 of 45 objects). To make the cut possible a column taller than 30 m gets an edge loop at 30 m (one polygon per side could not be cut). 12 floors: scale 0.0255 -> 0.0286 (+12%).
+
+**Русский**
+
+* **Высота разреза** (`Cut Height`, по умолчанию 30 м, 0 = выкл.): UV высоких объектов, прежде всего колонн на все этажи, режутся через каждые 30 м. Очень высокий островок (39 м на 12 этажах) раньше ограничивал масштаб всего тайла и оставлял свободную полосу сверху. Здание ниже 30 м (до 9 этажей по 3 м) не режется совсем, для него ничего не меняется (побитовое сравнение, 45 из 45 объектов). Чтобы разрез был возможен, колонна выше 30 м получает пояс рёбер на 30 м (одну грань на сторону резать нельзя). 12 этажей: масштаб 0.0255 -> 0.0286 (+12%).
+
 ## 0.20.1
 
 **English**

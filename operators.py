@@ -615,6 +615,18 @@ class CB_Props(bpy.types.PropertyGroup):
         min=1,
         soft_max=10,
     )
+    uv_column_cut: FloatProperty(
+        name="Cut Height",
+        description="Cut the UVs of tall objects (columns over many floors) every "
+        "this many metres (the columns get an edge loop there). A very tall island "
+        "would limit the scale of the whole tile. A building lower than this is "
+        "not changed. 0 = do not cut",
+        default=30.0,
+        min=0.0,
+        soft_max=60.0,
+        precision=1,
+        subtype="DISTANCE",
+    )
     uv_overlap: BoolProperty(
         name="Overlap Similar",
         description="Put UV islands of a similar size on top of each other "
@@ -1016,6 +1028,7 @@ class CB_PT_main(bpy.types.Panel):
         sub = box.column()
         sub.active = props.uv_split_slabs
         sub.prop(props, "uv_split_size")
+        box.prop(props, "uv_column_cut")
         box.prop(props, "uv_groups")
         sub = box.column()
         sub.active = props.uv_groups

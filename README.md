@@ -114,6 +114,7 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | UV Margin | Gap between UV islands in the tile (shrinks by itself when there are very many islands) | 0.005 |
 | Split Slabs | Cut the UVs of the slabs into pieces (see Cut Size) instead of one huge island per floor. Identical pieces stack on each other, so the slabs take little space and the rest of the building gets a bigger scale. The slab texture then repeats every piece | on |
 | Cut Size | Size of a slab piece in modules: 3 = 3 x 3 modules (9 x 9 m with 3 m modules). Smaller pieces save more space but repeat the texture more often | 3 |
+| Cut Height | Cut the UVs of tall objects (columns over many floors) every this many metres: a very tall island would limit the scale of the whole tile. A building lower than this (under 10 floors at 3 m) is not cut. 0 = do not cut | 30 |
 | Group by Material | Split the UV islands into groups (concrete, floors, ceilings, debris, formwork, railings, beams, lamps): only islands of one group stack, and every group has its own colour in the ID mask | on |
 | ID Mask | A colour ID mask (PNG) and a flat group-colour material on every object | on |
 | Mask Size | ID mask size, pixels | 2048 |

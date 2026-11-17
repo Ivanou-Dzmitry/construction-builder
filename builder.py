@@ -494,6 +494,8 @@ def build_columns(props, offset):
     block, with the rebar sticking out of the wall. `shaft_columns` says what to
     do with them: REMOVE (the shaft walls carry the floors), TRIM (the column
     ends at the roof slab, without rebar, below the shaft's top block) or FULL.
+    A column taller than `uv_column_cut` gets an edge loop every `uv_column_cut`
+    metres (for the UV cut, see unwrap); lower columns are not changed.
 
     Русский: Один бокс на узел сетки, от земли до верха, сквозь плиты.
     Каждая колонна поднимается над верхней плитой на `column_extension` плюс
@@ -503,7 +505,7 @@ def build_columns(props, offset):
     верхнего блока, с арматурой, торчащей из стены. `shaft_columns` говорит,
     что с ними делать: REMOVE (убрать, перекрытия несут стены шахты), TRIM
     (колонна кончается на плите крыши, без арматуры, ниже верхнего блока
-    шахты) или FULL.
+    шахты) или FULL. Колонна выше `uv_column_cut` получает пояс рёбер через каждые `uv_column_cut` метров (для разреза UV, см. unwrap); низкие колонны не меняются.
     """
     size = props.module_size
     cells = footprint_cells(props)
@@ -535,12 +537,22 @@ def build_columns(props, offset):
                 rebar = False
         # no bottom face: the column foot is buried in the ground
         # нижней грани нет: пята колонны в земле
-        _add_box(
+        faces = _add_box(
             bm,
             (cx - half_x, cy - half_y, 0.0),
             (cx + half_x, cy + half_y, top),
             bottom=False,
         )
+        # A tall column gets an edge loop every `uv_column_cut` metres, so its UVs can be cut there:
+        # one 37 m island would limit the scale of the whole tile. A lower column is not touched.
+        # У высокой колонны пояс рёбер через каждые `uv_column_cut` м, чтобы резать там UV:
+        # один островок в 37 м ограничил бы масштаб всего тайла. Низкая колонна не меняется.
+        if props.uv_column_cut:
+            geom = list(faces) + list({e for face in faces for e in face.edges}) + list({v for face in faces for v in face.verts})
+            level = props.uv_column_cut
+            while level < top - 0.05:
+                geom = list(set(bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-5, plane_co=(0.0, 0.0, level), plane_no=(0.0, 0.0, 1.0))["geom"]))
+                level += props.uv_column_cut
         if rebar:
             _add_rebar(bm, props, cx, cy, top, random.Random(f"{props.random_seed}|rebar|{i}|{j}"))
     return bm
@@ -1619,7 +1631,7 @@ def _remove_object(coll, name):
         bpy.data.meshes.remove(mesh)
 
 
-def _box_uvs(mesh, cell=None):
+def _box_uvs(mesh, cell=None, cut_z=None):
     """Box projection in world metres: 1 UV unit = 1 m, the same for every object.
 
     Each polygon is projected along its dominant normal axis. Signs are chosen
@@ -1632,6 +1644,11 @@ def _box_uvs(mesh, cell=None):
     its own island. A whole slab is then not one 36 m island but many identical
     3 m ones, which stack on each other and take almost no space.
 
+    With `cut_z` (a height in metres) the polygons above each multiple of it get
+    their own shift too, so a very tall island (a column over many floors) is
+    cut into pieces of at most `cut_z` metres. A tall island would otherwise
+    limit the scale of the whole tile.
+
     Returns (uvs, starts, totals, loop_verts): the flat UV list (u, v per loop)
     and the mesh arrays the UV island search needs.
 
@@ -1640,6 +1657,7 @@ def _box_uvs(mesh, cell=None):
     Знаки выбраны так, чтобы текстура читалась одинаково (не зеркалилась,
     «верх» оставался верхом) при взгляде снаружи. Объекты стоят в нуле без
     поворота и масштаба, поэтому пространство объекта равно мировому.
+    С `cut_z` (высота в метрах) полигоны выше каждого кратного ей уровня тоже получают свой сдвиг, поэтому очень высокий островок (колонна на много этажей) режется на куски не выше `cut_z` метров. Иначе высокий островок ограничивал бы масштаб всего тайла.
     С `cell` (размер модуля) каждый полигон сдвигается на своё значение на каждый модуль, поэтому UV соседних модулей не стыкуются: каждый модуль становится отдельным островком. Тогда целая плита это не один островок 36 м, а много одинаковых по 3 м, которые ложатся друг на друга и почти не занимают места.
     Возвращает (uvs, starts, totals, loop_verts): плоский список UV (u, v на
     петлю) и массивы меша, нужные поиску островков UV.
@@ -1662,11 +1680,14 @@ def _box_uvs(mesh, cell=None):
         nx, ny, nz = normals[3 * p], normals[3 * p + 1], normals[3 * p + 2]
         ax, ay, az = abs(nx), abs(ny), abs(nz)
         shift = 0.0
+        if cut_z:  # a different shift for every `cut_z` metres of height / свой сдвиг на каждые `cut_z` метров высоты
+            zs = [co[3 * loop_verts[loop] + 2] for loop in range(starts[p], starts[p] + totals[p])]
+            shift = 1.0e7 * math.floor(sum(zs) / len(zs) / cut_z)
         if cell:  # a different shift for every module: its UVs stay apart from the neighbours' / свой сдвиг на каждый модуль
             corners = [loop_verts[loop] for loop in range(starts[p], starts[p] + totals[p])]
             cx = sum(co[3 * v] for v in corners) / len(corners)
             cy = sum(co[3 * v + 1] for v in corners) / len(corners)
-            shift = 1000.0 * (math.floor(cx / cell) + 100.0 * math.floor(cy / cell))
+            shift += 1000.0 * (math.floor(cx / cell) + 100.0 * math.floor(cy / cell))
         for loop in range(starts[p], starts[p] + totals[p]):
             v = loop_verts[loop]
             x, y, z = co[3 * v], co[3 * v + 1], co[3 * v + 2]
@@ -1957,7 +1978,7 @@ def _group_similar(sizes, tolerance):
     return groups
 
 
-def unwrap(context, objs, margin, similarity=None, grouped=True, split_cell=None):
+def unwrap(context, objs, margin, similarity=None, grouped=True, split_cell=None, cut_height=None):
     """Box projection, then pack the islands of all objects into one 0-1 tile.
 
     All objects share ONE UV layout (one texture for the whole building). The
@@ -1975,6 +1996,8 @@ def unwrap(context, objs, margin, similarity=None, grouped=True, split_cell=None
     are packed together in one skyline, with no per-group bands, so no space is
     lost between groups. The slabs are one object but three groups: tops go to
     Floors, undersides to Ceilings, edges stay in Concrete (see slab_face_group).
+    With `cut_height` (metres) the UVs of tall objects (columns over many floors)
+    are cut every `cut_height` metres, so no island limits the scale of the tile.
     With `split_cell` (the module size times the cut size) the slabs are cut into
     pieces of that size, one island each (see _box_uvs).
 
@@ -1998,14 +2021,15 @@ def unwrap(context, objs, margin, similarity=None, grouped=True, split_cell=None
     верх идёт в Floors, низ в Ceilings, торцы остаются в Concrete (см.
     slab_face_group). С `split_cell` (размер модуля на размер куска) плиты
     режутся на куски этого размера, по островку на кусок (см. _box_uvs).
-    Возвращает [(группа, x0, y0, x1, y1)]: ячейку каждой стопки в единицах
+    С `cut_height` (метры) UV высоких объектов (колонн на много этажей) режутся через каждые `cut_height` метров, чтобы ни один островок не ограничивал масштаб тайла. : ячейку каждой стопки в единицах
     тайла, для ID-маски.
     """
     layouts = []
     rects = []  # (object index, loops, min u, min v, width, height, group) / (индекс объекта, петли, мин u, мин v, ширина, высота, группа)
     for index, obj in enumerate(objs):
         cell = split_cell if obj.name == FLOORS_NAME else None  # only the slabs are cut per module / по модулям режутся только плиты
-        uvs, starts, totals, loop_verts = _box_uvs(obj.data, cell)
+        cut_z = None if obj.name == FLOORS_NAME else cut_height  # tall islands are cut by height / высокие островки режутся по высоте
+        uvs, starts, totals, loop_verts = _box_uvs(obj.data, cell, cut_z)
         group = group_of(obj.name) if grouped else 0
         normals = None
         if grouped and obj.name == FLOORS_NAME:  # the slabs go to the group of their face / плиты идут в группу своей грани
@@ -2289,6 +2313,7 @@ def rebuild(context, props):
         props.uv_similarity if props.uv_overlap else None,
         props.uv_groups,
         props.module_size * props.uv_split_size if props.uv_split_slabs else None,
+        props.uv_column_cut or None,
     )
     has_mask = props.id_mask and props.uv_groups
     if has_mask:
