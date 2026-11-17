@@ -4,6 +4,26 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.20.0
+
+**English**
+
+* **Much better use of the UV tile (inside one material).** The islands of all groups are packed together into one free layout (a skyline packer: the tallest first, every next one into the lowest free spot), with no band per group. The scale on a 9 x 5 x 6 building is 0.0231 tile per metre against 0.0136 with bands per group (+70%); on a 12 x 6 x 12 building 0.0172 against 0.0094.
+* **Floors and ceilings are separate groups.** The slabs are one object, but the group is picked per face: top = `Floors` (orange in the ID mask, material `CB_Floors`, see the table in the README), underside = `Ceilings` (violet), edge = `Concrete`. Floor and ceiling get their own texture and their own AO. `CB_Floors` carries three materials, picked per face. The exporter keeps working with one material and restores the per-face indices.
+* **Split Slabs** (`Split Slabs`, `Cut Size`, on by default, 3 modules = 9 x 9 m): the UVs of the slabs are cut into pieces, identical pieces stack on each other. With the cut the scale grows to 0.0298 (61 px per metre in a 2048 texture, 28 before).
+* **The ID mask is painted by the place of every stack**, not by full-width bands, so the mask follows the free layout.
+* Fixed: a slab edge face could share a UV edge with a top face by chance and get the floor colour; such islands are now split by group. A test checks the mask colour under the centre of every polygon (24,000 polygons, no mismatch) in five configurations.
+* The geometry did not change (45 of 45 objects are identical in a bit-for-bit comparison).
+
+**Русский**
+
+* **Намного лучше использование UV-тайла (в рамках одного материала).** Островки всех групп упаковываются вместе в одну свободную раскладку (упаковка по силуэту: самые высокие первыми, каждый следующий в самое низкое свободное место), без полосы на группу. Масштаб на здании 9 x 5 x 6 равен 0.0231 тайла на метр против 0.0136 с полосами на группу (+70%); на здании 12 x 6 x 12 0.0172 против 0.0094.
+* **Полы и потолки это отдельные группы.** Плиты это один объект, но группа выбирается по грани: верх = `Floors` (оранжевый в ID-маске, материал `CB_Floors`, см. таблицу в README), низ = `Ceilings` (фиолетовый), торец = `Concrete`. У пола и потолка своя текстура и свой AO. У `CB_Floors` три материала, выбираемые по грани. Экспорт по-прежнему работает с одним материалом и возвращает индексы граней.
+* **Резка плит** (`Split Slabs`, `Cut Size`, по умолчанию вкл., 3 модуля = 9 x 9 м): UV плит режутся на куски, одинаковые куски ложатся друг на друга. С резкой масштаб растёт до 0.0298 (61 пиксель на метр в текстуре 2048, было 28).
+* **ID-маска красится по месту каждой стопки**, а не полосами на всю ширину, поэтому маска следует свободной раскладке.
+* Исправлено: торец плиты мог случайно совпасть по UV-ребру с верхом и получить цвет пола; такие островки теперь делятся по группам. Тест проверяет цвет маски под центром каждого полигона (24 000 полигонов, без расхождений) в пяти конфигурациях.
+* Геометрия не изменилась (45 из 45 объектов совпали при побитовом сравнении).
+
 ## 0.19.0
 
 **English**

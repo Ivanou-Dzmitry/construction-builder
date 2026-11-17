@@ -14,6 +14,7 @@ ID-маска. Здесь только геометрия (bmesh) и данны�
 `footprint_cells`.
 """
 
+import bisect
 import math
 import random
 
@@ -1618,13 +1619,18 @@ def _remove_object(coll, name):
         bpy.data.meshes.remove(mesh)
 
 
-def _box_uvs(mesh):
+def _box_uvs(mesh, cell=None):
     """Box projection in world metres: 1 UV unit = 1 m, the same for every object.
 
     Each polygon is projected along its dominant normal axis. Signs are chosen
     so a texture reads the same way (not mirrored, "up" stays up) when seen from
     outside. Objects sit at the origin with no rotation or scale, so object
     space equals world space.
+
+    With `cell` (the module size) every polygon is shifted by its own amount per
+    module, so the UVs of neighbouring modules do not meet: each module becomes
+    its own island. A whole slab is then not one 36 m island but many identical
+    3 m ones, which stack on each other and take almost no space.
 
     Returns (uvs, starts, totals, loop_verts): the flat UV list (u, v per loop)
     and the mesh arrays the UV island search needs.
@@ -1634,6 +1640,7 @@ def _box_uvs(mesh):
     Знаки выбраны так, чтобы текстура читалась одинаково (не зеркалилась,
     «верх» оставался верхом) при взгляде снаружи. Объекты стоят в нуле без
     поворота и масштаба, поэтому пространство объекта равно мировому.
+    С `cell` (размер модуля) каждый полигон сдвигается на своё значение на каждый модуль, поэтому UV соседних модулей не стыкуются: каждый модуль становится отдельным островком. Тогда целая плита это не один островок 36 м, а много одинаковых по 3 м, которые ложатся друг на друга и почти не занимают места.
     Возвращает (uvs, starts, totals, loop_verts): плоский список UV (u, v на
     петлю) и массивы меша, нужные поиску островков UV.
     """
@@ -1654,6 +1661,12 @@ def _box_uvs(mesh):
     for p in range(n_polys):
         nx, ny, nz = normals[3 * p], normals[3 * p + 1], normals[3 * p + 2]
         ax, ay, az = abs(nx), abs(ny), abs(nz)
+        shift = 0.0
+        if cell:  # a different shift for every module: its UVs stay apart from the neighbours' / свой сдвиг на каждый модуль
+            corners = [loop_verts[loop] for loop in range(starts[p], starts[p] + totals[p])]
+            cx = sum(co[3 * v] for v in corners) / len(corners)
+            cy = sum(co[3 * v + 1] for v in corners) / len(corners)
+            shift = 1000.0 * (math.floor(cx / cell) + 100.0 * math.floor(cy / cell))
         for loop in range(starts[p], starts[p] + totals[p]):
             v = loop_verts[loop]
             x, y, z = co[3 * v], co[3 * v + 1], co[3 * v + 2]
@@ -1663,8 +1676,8 @@ def _box_uvs(mesh):
                 u, w = (y, z) if nx > 0 else (-y, z)
             else:
                 u, w = (-x, z) if ny > 0 else (x, z)
-            uvs[2 * loop] = u
-            uvs[2 * loop + 1] = w
+            uvs[2 * loop] = u + shift
+            uvs[2 * loop + 1] = w + shift
     return uvs, starts, totals, loop_verts
 
 
@@ -1720,8 +1733,25 @@ GROUPS = (
     ("Railings", (1.0, 1.0, 0.0), (RAILINGS_NAME,)),
     ("Beams", (0.0, 1.0, 1.0), (FORMWORK_BEAMS_NAME,)),  # the timber beams of the formwork / деревянные балки опалубки
     ("Lamps", (1.0, 0.0, 1.0), (LAMPS_NAME,)),
+    # The slabs are one object but three groups: chosen per face, not per object / плиты один объект, но три группы: по грани, а не по объекту
+    ("Floors", (1.0, 0.5, 0.0), ()),  # slab tops / верх плит (полы)
+    ("Ceilings", (0.55, 0.0, 1.0), ()),  # slab undersides / низ плит (потолки)
 )
+GROUP_FLOORS = 6
+GROUP_CEILINGS = 7
 ID_BACKGROUND = (0.05, 0.05, 0.05)
+
+
+def slab_face_group(normal_z):
+    """Group of a slab face: tops are floors, undersides ceilings, edges concrete.
+
+    Русский: Группа грани плиты: верх это полы, низ потолки, торцы бетон.
+    """
+    if normal_z > 0.9:
+        return GROUP_FLOORS
+    if normal_z < -0.9:
+        return GROUP_CEILINGS
+    return 0
 
 
 def group_of(name):
@@ -1735,40 +1765,92 @@ def group_of(name):
     return 0
 
 
-def _shelf_layout(sizes, scale, gap):
-    """Shelf-pack rectangles, tallest first, into a strip one tile wide.
+def _skyline_layout(sizes, scale, gap):
+    """Pack rectangles into a strip one tile wide with the skyline method.
 
-    `sizes` are (width, height) in metres. Returns (positions, height) with the
-    lower-left corners in tile units, or None if a rectangle is wider than the
-    strip.
+    `sizes` are (width, height) in metres. The rectangles are taken tallest
+    first. Each one goes to the lowest place along the skyline (the top edge
+    of what is already placed) where it fits, the leftmost on a tie, so it
+    fills the gaps next to lower neighbours instead of leaving them empty as
+    rows of equal height would. Returns (positions, height) with the lower-left
+    corners in tile units, in the order of `sizes`, or None if a rectangle is
+    wider than the strip.
 
-    Русский: Укладывает прямоугольники полками, самые высокие первыми, в
-    полосу шириной в один тайл. `sizes` это (ширина, высота) в метрах.
-    Возвращает (позиции, высота) с левыми нижними углами в единицах тайла,
-    или None, если какой-то прямоугольник шире полосы.
+    Русский: Упаковывает прямоугольники в полосу шириной в один тайл методом
+    «силуэта» (skyline). `sizes` это (ширина, высота) в метрах. Прямоугольники
+    берутся от самых высоких. Каждый ставится в самое низкое место вдоль
+    силуэта (верхней кромки уже уложенного), куда он влезает, при равенстве
+    левее, поэтому он заполняет пустоты рядом с более низкими соседями, а не
+    оставляет их, как ряды одинаковой высоты. Возвращает (позиции, высота) с
+    левыми нижними углами в единицах тайла, в порядке `sizes`, или None, если
+    какой-то прямоугольник шире полосы.
     """
     limit = 1.0 - gap
-    x = y = shelf = 0.0
-    positions = []
+    padded = []
     for w, h in sizes:
         pw = w * scale + gap
         ph = h * scale + gap
         if pw > limit:
             return None
-        if x + pw > limit:  # next shelf / следующая полка
-            y += shelf
-            x = shelf = 0.0
-        if shelf == 0.0:
-            shelf = ph  # the first rectangle on a shelf is the tallest / первый прямоугольник на полке самый высокий
-        positions.append((x + gap / 2, y + gap / 2))
-        x += pw
-    return positions, y + shelf
+        padded.append((pw, ph))
+    order = sorted(range(len(padded)), key=lambda i: (-padded[i][1], i))
+
+    sky = [[0.0, 0.0, limit]]  # segments [x, height of the top edge, width] / сегменты [x, высота кромки, ширина]
+    positions = [None] * len(padded)
+    top = 0.0
+    for index in order:
+        pw, ph = padded[index]
+        best_x = best_y = None
+        for i in range(len(sky)):
+            x = sky[i][0]
+            if x + pw > limit + 1e-9:
+                break
+            y = sky[i][1]
+            covered = sky[i][2]
+            j = i
+            while covered < pw - 1e-9:  # the highest segment under the rectangle / самый высокий сегмент под ним
+                j += 1
+                y = max(y, sky[j][1])
+                covered += sky[j][2]
+            if best_y is None or y < best_y - 1e-9 or (abs(y - best_y) <= 1e-9 and x < best_x):
+                best_x, best_y = x, y
+        positions[index] = (best_x + gap / 2, best_y + gap / 2)
+        top = max(top, best_y + ph)
+
+        end = best_x + pw  # the new skyline: cut the covered part, add the rectangle's top / новый силуэт
+        cut = []
+        for sx, sy, sw in sky:
+            se = sx + sw
+            if se <= best_x + 1e-9 or sx >= end - 1e-9:
+                cut.append([sx, sy, sw])
+                continue
+            if sx < best_x - 1e-9:
+                cut.append([sx, sy, best_x - sx])
+            if se > end + 1e-9:
+                cut.append([end, sy, se - end])
+        cut.append([best_x, best_y + ph, pw])
+        cut.sort(key=lambda segment: segment[0])
+        sky = []
+        for segment in cut:  # join neighbours of the same height / склеить соседей одной высоты
+            if sky and abs(sky[-1][1] - segment[1]) < 1e-9 and abs(sky[-1][0] + sky[-1][2] - segment[0]) < 1e-9:
+                sky[-1][2] += segment[2]
+            else:
+                sky.append(segment)
+    return positions, top
+
+
+def _gap(margin, count):
+    """Gap between rectangles: `margin`, but never so big that `count` of them cannot fit.
+
+    Русский: Зазор между прямоугольниками: `margin`, но не больше, чем позволяет уместить `count` штук.
+    """
+    return min(margin, 0.45 / math.sqrt(max(count, 1)))
 
 
 def _pack_bands(bands, margin):
     """Pack groups of rectangles into the unit tile, one band per group.
 
-    `bands` is a list of size lists (see _shelf_layout), each tallest first. The
+    `bands` is a list of size lists (see _skyline_layout). The
     bands are stacked from the bottom, each as high as its rectangles need, and
     all share ONE uniform scale: the largest one that still fits the tile (found
     by bisection). The gap between rectangles is `margin`, but never so big that
@@ -1778,8 +1860,7 @@ def _pack_bands(bands, margin):
     corner of rectangle i of that band, ranges[band] its (v start, v end).
 
     Русский: Упаковывает группы прямоугольников в единичный тайл, по полосе
-    на группу. `bands` это список списков размеров (см. _shelf_layout), в
-    каждом самые высокие первыми. Полосы стопкой снизу, каждая такой высоты,
+    на группу. `bands` это список списков размеров (см. _skyline_layout). Полосы стопкой снизу, каждая такой высоты,
     какая нужна её прямоугольникам, и все с ОДНИМ равномерным масштабом:
     самым крупным, при котором всё ещё влезает в тайл (подбирается делением
     пополам). Зазор между прямоугольниками `margin`, но не больше, чем
@@ -1787,15 +1868,14 @@ def _pack_bands(bands, margin):
     диапазоны): positions[полоса][i] это левый нижний угол прямоугольника i
     этой полосы, ranges[полоса] её (v начало, v конец).
     """
-    count = sum(len(sizes) for sizes in bands)
-    gap = min(margin, 0.45 / math.sqrt(max(count, 1)))
+    gap = _gap(margin, sum(len(sizes) for sizes in bands))
 
     def layout(scale):
         positions = []
         ranges = []
         y0 = 0.0
         for sizes in bands:
-            result = _shelf_layout(sizes, scale, gap)
+            result = _skyline_layout(sizes, scale, gap)
             if result is None:
                 return None
             placed, height = result
@@ -1807,12 +1887,17 @@ def _pack_bands(bands, margin):
         return positions, ranges
 
     biggest = max(max(w, h) for sizes in bands for w, h in sizes)
-    low, high = 0.0, (1.0 - gap) / biggest
+    total_area = sum(w * h for sizes in bands for w, h in sizes)
+    # the scale can be no bigger than the widest rectangle allows or than the total area allows
+    # масштаб не больше, чем позволяет самый большой прямоугольник и суммарная площадь
+    low, high = 0.0, min((1.0 - gap) / biggest, 1.0 / math.sqrt(total_area))
     best = layout(high)
     if best is not None:
         return (high, *best)
     best = None
-    for _ in range(45):
+    for _ in range(40):
+        if high - low <= 2e-4 * high:  # a 0.02% finer scale would not show / точнее 0.02% масштаба не видно
+            break
         mid = (low + high) / 2
         result = layout(mid)
         if result is None:
@@ -1872,7 +1957,7 @@ def _group_similar(sizes, tolerance):
     return groups
 
 
-def unwrap(context, objs, margin, similarity=None, grouped=True):
+def unwrap(context, objs, margin, similarity=None, grouped=True, split_cell=None):
     """Box projection, then pack the islands of all objects into one 0-1 tile.
 
     All objects share ONE UV layout (one texture for the whole building). The
@@ -1882,14 +1967,19 @@ def unwrap(context, objs, margin, similarity=None, grouped=True):
     orientation (no rotation) and one uniform scale, so the texel density is the
     same everywhere.
 
-    With `grouped`, every group in GROUPS (concrete, debris, formwork, railings)
-    gets its own band of the tile; islands of different groups never share
-    space. Inside a group, islands of a similar size (`similarity`, for example
-    0.02 = 2%, like Range in TechArt Tools) are placed on top of each other,
-    centred, floor on floor and door on door, which saves most of the space.
-    `similarity=None` gives every island its own place.
+    Islands of a similar size (`similarity`, for example 0.02 = 2%, like Range in
+    TechArt Tools) are placed on top of each other, centred, floor on floor and
+    door on door, which saves most of the space. `similarity=None` gives every
+    island its own place. With `grouped`, only islands of the same group (GROUPS)
+    are stacked, so the ID mask can colour every place with its group. All groups
+    are packed together in one skyline, with no per-group bands, so no space is
+    lost between groups. The slabs are one object but three groups: tops go to
+    Floors, undersides to Ceilings, edges stay in Concrete (see slab_face_group).
+    With `split_cell` (the module size times the cut size) the slabs are cut into
+    pieces of that size, one island each (see _box_uvs).
 
-    Returns [(group index, v start, v end)], the band of every group present.
+    Returns [(group, x0, y0, x1, y1)]: the cell of every stack in tile units, for
+    the ID mask.
 
     Русский: Box Projection, затем упаковка островков всех объектов в один
     тайл 0-1. Все объекты делят ОДНУ UV-раскладку (одна текстура на всё
@@ -1897,64 +1987,93 @@ def unwrap(context, objs, margin, similarity=None, grouped=True):
     Islands: оператор зависит от состояния редактора (выбор UV, режим sync,
     активная область) и в некоторых сессиях ничего не делал. Островки
     сохраняют ориентацию (без поворота) и один равномерный масштаб, поэтому
-    плотность текселей везде одинакова. С `grouped` каждая группа из GROUPS
-    (бетон, мусор, опалубка, ограждения, балки, лампы) получает свою полосу
-    тайла; островки разных групп не делят место. Внутри группы островки
-    похожего размера (`similarity`, например 0.02 = 2%, как Range в TechArt
-    Tools) кладутся друг на друга по центру, пол на пол и дверь на дверь,
-    что экономит почти всё место. `similarity=None` даёт каждому островку
-    своё место. Возвращает [(индекс группы, v начало, v конец)], полосу
-    каждой имеющейся группы.
+    плотность текселей везде одинакова. Островки похожего размера
+    (`similarity`, например 0.02 = 2%, как Range в TechArt Tools) кладутся
+    друг на друга по центру, пол на пол и дверь на дверь, что экономит почти
+    всё место. `similarity=None` даёт каждому островку своё место. С
+    `grouped` друг на друга ложатся только островки одной группы (GROUPS),
+    поэтому ID-маска может покрасить каждое место в цвет своей группы. Все
+    группы упаковываются вместе одним силуэтом, без полос на группу, поэтому
+    место между группами не теряется. Плиты это один объект, но три группы:
+    верх идёт в Floors, низ в Ceilings, торцы остаются в Concrete (см.
+    slab_face_group). С `split_cell` (размер модуля на размер куска) плиты
+    режутся на куски этого размера, по островку на кусок (см. _box_uvs).
+    Возвращает [(группа, x0, y0, x1, y1)]: ячейку каждой стопки в единицах
+    тайла, для ID-маски.
     """
     layouts = []
-    rects = []  # (object index, loops, min u, min v, width, height) / (индекс объекта, петли, мин u, мин v, ширина, высота)
+    rects = []  # (object index, loops, min u, min v, width, height, group) / (индекс объекта, петли, мин u, мин v, ширина, высота, группа)
     for index, obj in enumerate(objs):
-        uvs, starts, totals, loop_verts = _box_uvs(obj.data)
+        cell = split_cell if obj.name == FLOORS_NAME else None  # only the slabs are cut per module / по модулям режутся только плиты
+        uvs, starts, totals, loop_verts = _box_uvs(obj.data, cell)
+        group = group_of(obj.name) if grouped else 0
+        normals = None
+        if grouped and obj.name == FLOORS_NAME:  # the slabs go to the group of their face / плиты идут в группу своей грани
+            normals = [0.0] * (3 * len(starts))
+            obj.data.polygons.foreach_get("normal", normals)
+        pieces = []  # (loops, group)
         for loops in _find_islands(uvs, starts, totals, loop_verts):
+            if normals is None:
+                pieces.append((loops, group))
+                continue
+            # A top and an edge face can touch in UV by chance and be found as one island:
+            # split such an island by group, so every face keeps its own colour.
+            # Верх и торец могут случайно совпасть в UV и найтись одним островком: делим его по группам.
+            parts = {}
+            for loop in loops:
+                polygon = bisect.bisect_right(starts, loop) - 1
+                parts.setdefault(slab_face_group(normals[3 * polygon + 2]), []).append(loop)
+            pieces += [(part, part_group) for part_group, part in parts.items()]
+        for loops, island_group in pieces:
             us = [uvs[2 * loop] for loop in loops]
             vs = [uvs[2 * loop + 1] for loop in loops]
             low_u, low_v = min(us), min(vs)
-            rects.append((index, loops, low_u, low_v, max(max(us) - low_u, 1e-6), max(max(vs) - low_v, 1e-6)))
+            rects.append((index, loops, low_u, low_v, max(max(us) - low_u, 1e-6), max(max(vs) - low_v, 1e-6), island_group))
         layouts.append(uvs)
     if not rects:
         return []
 
     by_group = {}
     for n, rect in enumerate(rects):
-        group = group_of(objs[rect[0]].name) if grouped else 0
-        by_group.setdefault(group, []).append(n)
+        by_group.setdefault(rect[6], []).append(n)
 
-    group_ids = sorted(by_group)
-    band_stacks = []  # per band: stacks of islands that share one place / на полосу: стопки островков, делящих одно место
-    band_sizes = []
-    for group in group_ids:
+    stacks = []  # (group, island numbers): islands of one group that share one place / (группа, номера островков)
+    for group in sorted(by_group):
         numbers = sorted(by_group[group], key=lambda n: -(rects[n][4] * rects[n][5]))
         if similarity is None:  # no stacking: every island has its own place / без стопок: у каждого островка своё место
-            stacks = [[n] for n in numbers]
+            found_stacks = [[n] for n in numbers]
         else:
             sized = [(rects[n][4], rects[n][5]) for n in numbers]
-            stacks = [[numbers[k] for k in found] for found in _group_similar(sized, similarity)]
-        stacks.sort(key=lambda s: -max(rects[n][5] for n in s))
-        band_stacks.append(stacks)
-        band_sizes.append([(max(rects[n][4] for n in s), max(rects[n][5] for n in s)) for s in stacks])
+            found_stacks = [[numbers[k] for k in found] for found in _group_similar(sized, similarity)]
+        stacks += [(group, stack) for stack in found_stacks]
+    stacks.sort(key=lambda item: -max(rects[n][5] for n in item[1]))
+    sizes = [(max(rects[n][4] for n in stack), max(rects[n][5] for n in stack)) for _group, stack in stacks]
 
-    scale, positions, ranges = _pack_bands(band_sizes, margin)
-    for stacks, sizes, placed in zip(band_stacks, band_sizes, positions):
-        for stack, (stack_w, stack_h), (x, y) in zip(stacks, sizes, placed):
-            centre_x = x + stack_w * scale / 2
-            centre_y = y + stack_h * scale / 2
-            for n in stack:
-                index, loops, low_u, low_v, width, height = rects[n]
-                mid_u = low_u + width / 2
-                mid_v = low_v + height / 2
-                uvs = layouts[index]
-                for loop in loops:
-                    uvs[2 * loop] = (uvs[2 * loop] - mid_u) * scale + centre_x
-                    uvs[2 * loop + 1] = (uvs[2 * loop + 1] - mid_v) * scale + centre_y
+    # ONE strip for all groups: no per-group bands, so no space is lost between groups
+    # ОДНА полоса на все группы: без полос на группу, поэтому место между группами не теряется
+    scale, positions, _ranges = _pack_bands([sizes], margin)
+    gap = _gap(margin, len(sizes))
+    id_rects = []
+    for (group, stack), (stack_w, stack_h), (x, y) in zip(stacks, sizes, positions[0]):
+        centre_x = x + stack_w * scale / 2
+        centre_y = y + stack_h * scale / 2
+        for n in stack:
+            index, loops, low_u, low_v, width, height, _group = rects[n]
+            mid_u = low_u + width / 2
+            mid_v = low_v + height / 2
+            uvs = layouts[index]
+            for loop in loops:
+                uvs[2 * loop] = (uvs[2 * loop] - mid_u) * scale + centre_x
+                uvs[2 * loop + 1] = (uvs[2 * loop + 1] - mid_v) * scale + centre_y
+        id_rects.append((
+            group,
+            max(x - gap / 2, 0.0), max(y - gap / 2, 0.0),
+            min(x + stack_w * scale + gap / 2, 1.0), min(y + stack_h * scale + gap / 2, 1.0),
+        ))
     for obj, uvs in zip(objs, layouts):
         obj.data.uv_layers.active.data.foreach_set("uv", uvs)
         obj.data.update()
-    return [(group, low, high) for group, (low, high) in zip(group_ids, ranges)]
+    return id_rects
 
 
 def _group_material(group):
@@ -1975,10 +2094,15 @@ def _group_material(group):
     return material
 
 
-def _make_id_image(size, bands):
-    """The ID mask: every group's band of the tile filled with the group colour.
+def _make_id_image(size, id_rects):
+    """The ID mask: the cell of every stack of islands filled with its group colour.
 
-    Русский: ID-маска: полоса тайла каждой группы залита цветом этой группы.
+    `id_rects` is [(group, x0, y0, x1, y1)] in tile units, from unwrap. The rest
+    is the dark background.
+
+    Русский: ID-маска: ячейка каждой стопки островков залита цветом её группы.
+    `id_rects` это [(группа, x0, y0, x1, y1)] в единицах тайла, из unwrap.
+    Остальное тёмный фон.
     """
     import numpy as np
 
@@ -1991,25 +2115,37 @@ def _make_id_image(size, bands):
     pixels = np.empty((size, size, 4), dtype=np.float32)
     pixels[:, :, :3] = ID_BACKGROUND
     pixels[:, :, 3] = 1.0
-    for group, low, high in bands:
-        pixels[int(round(low * size)):int(round(high * size)), :, :3] = GROUPS[group][1]
+    for group, x0, y0, x1, y1 in id_rects:
+        pixels[int(round(y0 * size)):int(round(y1 * size)), int(round(x0 * size)):int(round(x1 * size)), :3] = GROUPS[group][1]
     image.pixels.foreach_set(pixels.ravel())
     image.update()
     return image
 
 
-def assign_ids(props, objs, bands, materials=True):
+def assign_ids(props, objs, id_rects, materials=True):
     """Build the ID mask image and, unless `materials` is off, give every object
-    the material of its group.
+    the material of its group. The slab object gets three materials (concrete,
+    floors, ceilings), picked per face.
 
     Русский: Строит картинку ID-маски и, если не выключено `materials`,
-    ставит каждому объекту материал его группы.
+    ставит каждому объекту материал его группы. Объект плит получает три
+    материала (бетон, полы, потолки), выбираемых по грани.
     """
     if materials:
         for obj in objs:
-            obj.data.materials.clear()
-            obj.data.materials.append(_group_material(group_of(obj.name)))
-    _make_id_image(props.id_mask_size, bands)
+            mesh = obj.data
+            mesh.materials.clear()
+            if obj.name != FLOORS_NAME:
+                mesh.materials.append(_group_material(group_of(obj.name)))
+                continue
+            # the slabs: three materials, picked per face / плиты: три материала, по грани
+            for group in (0, GROUP_FLOORS, GROUP_CEILINGS):
+                mesh.materials.append(_group_material(group))
+            normals = [0.0] * (3 * len(mesh.polygons))
+            mesh.polygons.foreach_get("normal", normals)
+            slots = {0: 0, GROUP_FLOORS: 1, GROUP_CEILINGS: 2}
+            mesh.polygons.foreach_set("material_index", [slots[slab_face_group(normals[3 * p + 2])] for p in range(len(mesh.polygons))])
+    _make_id_image(props.id_mask_size, id_rects)
 
 
 def building_material(use_mask):
@@ -2148,14 +2284,15 @@ def rebuild(context, props):
                 bm.free()
             _remove_object(coll, name)
 
-    bands = unwrap(
+    id_rects = unwrap(
         context, objs, props.uv_margin,
         props.uv_similarity if props.uv_overlap else None,
         props.uv_groups,
+        props.module_size * props.uv_split_size if props.uv_split_slabs else None,
     )
     has_mask = props.id_mask and props.uv_groups
     if has_mask:
-        assign_ids(props, objs, bands, materials=not props.single_mesh)
+        assign_ids(props, objs, id_rects, materials=not props.single_mesh)
     if props.single_mesh:  # one mesh, one material: easier to texture / один меш, один материал: удобнее текстурить
         building = join_objects(coll, objs, BUILDING_NAME)
         for name in [obj.name for obj in objs]:

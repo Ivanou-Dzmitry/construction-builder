@@ -579,16 +579,15 @@ class CB_Props(bpy.types.PropertyGroup):
     )
     uv_groups: BoolProperty(
         name="Group by Material",
-        description="Give each group its own band of the UV tile: concrete "
-        "(floors, columns, walls, shafts, stairs), debris, formwork, railings. "
-        "Islands of different groups never share space, so a mask can select a "
-        "group by its colour",
+        description="Split the UV islands into groups: concrete, floors, ceilings, "
+        "debris, formwork, railings, beams, lamps. Islands of different groups "
+        "never share space, so a mask can select a group by its colour",
         default=True,
     )
     id_mask: BoolProperty(
         name="ID Mask",
         description="Make a colour ID mask image (one colour per group, filling "
-        "its UV band) and give every object the flat-colour material of its "
+        "the UV places of its islands) and give every object the flat-colour material of its "
         "group. Saved next to the FBX when you export",
         default=True,
     )
@@ -598,6 +597,23 @@ class CB_Props(bpy.types.PropertyGroup):
         default=2048,
         min=64,
         max=8192,
+    )
+    uv_split_slabs: BoolProperty(
+        name="Split Slabs",
+        description="Cut the UVs of the slabs into pieces (see Cut Size) instead of "
+        "one huge island per floor. The identical pieces stack on each other, so "
+        "the slabs take little space and the rest of the building gets a bigger "
+        "scale. The slab texture then repeats every piece",
+        default=True,
+    )
+    uv_split_size: IntProperty(
+        name="Cut Size",
+        description="Size of a slab piece in modules: 3 = 3 x 3 modules (9 x 9 m "
+        "with 3 m modules). Smaller pieces save more space but repeat the "
+        "texture more often",
+        default=3,
+        min=1,
+        soft_max=10,
     )
     uv_overlap: BoolProperty(
         name="Overlap Similar",
@@ -756,9 +772,13 @@ class CB_OT_export_fbx(bpy.types.Operator):
         if props.export_one_material:
             single = builder.building_material(props.id_mask and props.uv_groups)
             for obj in objs:
-                saved.append((obj, list(obj.data.materials)))
-                obj.data.materials.clear()
-                obj.data.materials.append(single)
+                mesh = obj.data
+                indices = [0] * len(mesh.polygons)
+                mesh.polygons.foreach_get("material_index", indices)
+                saved.append((obj, list(mesh.materials), indices))
+                mesh.materials.clear()
+                mesh.materials.append(single)
+                mesh.polygons.foreach_set("material_index", [0] * len(indices))
         try:
             bpy.ops.export_scene.fbx(
                 filepath=path,
@@ -768,10 +788,12 @@ class CB_OT_export_fbx(bpy.types.Operator):
                 mesh_smooth_type="FACE",
             )
         finally:
-            for obj, materials in saved:
-                obj.data.materials.clear()
+            for obj, materials, indices in saved:
+                mesh = obj.data
+                mesh.materials.clear()
                 for material in materials:
-                    obj.data.materials.append(material)
+                    mesh.materials.append(material)
+                mesh.polygons.foreach_set("material_index", indices)
         image = bpy.data.images.get(builder.ID_IMAGE_NAME)
         if image is not None and props.id_mask and props.uv_groups:
             id_path = os.path.splitext(path)[0] + "_ID.png"
@@ -990,6 +1012,10 @@ class CB_PT_main(bpy.types.Panel):
         box = layout.box()
         box.label(text="UV", icon="UV")
         box.prop(props, "uv_margin")
+        box.prop(props, "uv_split_slabs")
+        sub = box.column()
+        sub.active = props.uv_split_slabs
+        sub.prop(props, "uv_split_size")
         box.prop(props, "uv_groups")
         sub = box.column()
         sub.active = props.uv_groups

@@ -112,7 +112,9 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | One Material | On export every object gets the single material `CB_Building` with the ID mask, so the FBX and Substance have one texture set. The group materials come back afterwards | on |
 | Single Mesh | Bake the whole building into one mesh `CB_Building` with one material and one UV, which is easier to texture | off |
 | UV Margin | Gap between UV islands in the tile (shrinks by itself when there are very many islands) | 0.01 |
-| Group by Material | A separate band of the UV tile for each group: concrete, debris, formwork, railings, beams, lamps | on |
+| Split Slabs | Cut the UVs of the slabs into pieces (see Cut Size) instead of one huge island per floor. Identical pieces stack on each other, so the slabs take little space and the rest of the building gets a bigger scale. The slab texture then repeats every piece | on |
+| Cut Size | Size of a slab piece in modules: 3 = 3 x 3 modules (9 x 9 m with 3 m modules). Smaller pieces save more space but repeat the texture more often | 3 |
+| Group by Material | Split the UV islands into groups (concrete, floors, ceilings, debris, formwork, railings, beams, lamps): only islands of one group stack, and every group has its own colour in the ID mask | on |
 | ID Mask | A colour ID mask (PNG) and a flat group-colour material on every object | on |
 | Mask Size | ID mask size, pixels | 2048 |
 | Overlap Similar | Put UV islands of a similar size on top of each other to save space | on |
@@ -295,32 +297,37 @@ Boxes of different height and length on the floors, so the frame looks lived-in 
 The whole building shares **one UV map** (one texture for everything, tile 0-1).
 
 1. **Box projection in world metres**: 1 m = 1 UV unit, so the texel density is the same everywhere. Every face is projected along the dominant axis of its normal, "up" stays up, the texture is not mirrored.
-2. **Groups.** With `Group by Material` every group gets its own **band** of the tile, and groups never overlap:
+2. **Groups.** With `Group by Material` every UV island belongs to a group. Islands of different groups never stack on each other, so every place of the tile has exactly one colour in the ID mask:
 
    | Group | What is in it | ID colour | Material |
    |---|---|---|---|
-   | 1. Concrete | slabs, columns, walls, shafts, stairs | red | `CB_Concrete` |
+   | 1. Concrete | columns, walls, shafts, stairs, slab edges | red | `CB_Concrete` |
    | 2. Debris | debris | green | `CB_Debris` |
    | 3. Formwork | steel formwork props | blue | `CB_Formwork` |
    | 4. Railings | railings | yellow | `CB_Railings` |
    | 5. Beams | timber formwork beams | cyan | `CB_Beams` |
    | 6. Lamps | lamps | magenta | `CB_Lamps` |
+   | 7. Floors | tops of the slabs | orange | `CB_Floors` |
+   | 8. Ceilings | undersides of the slabs | violet | `CB_Ceilings` |
 
-   If a group is not in the building (for example formwork is off), it has no band.
-3. **Stacks of similar islands.** Inside a group, islands of a similar size are put **on top of each other, centred**: floor on floor, door on door, prop on prop. This is what To Stack does in TechArt Tools: widths and heights are compared with the `Similarity` tolerance (2% by default, as there), an island is only moved, never rotated or scaled. The overlap is heavy, and that is fine. With `Overlap Similar` off every island has its own place, but the scale is then much smaller.
-4. **Packing and scale.** Stacks are laid out in rows inside the band of their group (tallest first), and the whole layout is scaled uniformly to fit 0-1 (the biggest scale that fits is found). This is our own packing, not the Pack Islands operator: that operator depends on the editor state and did nothing in some sessions.
+   The slabs are one object (`CB_Floors`), but the group is chosen **per face**: top = Floors, underside = Ceilings, edge = Concrete. So the floor and the ceiling can have their own texture (and their own ambient occlusion, without stains from the boxes standing on the slab). In Blender `CB_Floors` carries three materials, picked per face. A group that is not in the building has no place in the mask.
+3. **Cutting the slabs.** One slab is a huge island (36 m and more) that wastes the tile. With `Split Slabs` the slab UVs are cut into pieces of `Cut Size` modules (3 = 9 x 9 m, one island per piece). Identical pieces then stack on each other and take almost no space, the texture of the slab repeats every piece. Cut Size 1 saves the most space (3 x 3 m pieces), bigger pieces repeat the texture less often.
+4. **Stacks of similar islands.** Inside a group, islands of a similar size are put **on top of each other, centred**: floor on floor, door on door, prop on prop. This is what To Stack does in TechArt Tools: widths and heights are compared with the `Similarity` tolerance (2% by default, as there), an island is only moved, never rotated or scaled. The overlap is heavy, and that is fine. With `Overlap Similar` off every island has its own place, but the scale is then much smaller.
+5. **Packing and scale.** All stacks of all groups are packed together into **one free layout**, with no band per group (a band per group left a lot of empty space, the scale was about 40% smaller). The tallest stacks go first, every next one into the lowest free spot of the outline, and the whole layout is scaled uniformly to fit 0-1 (the biggest scale that fits is found). This is our own packing, not the Pack Islands operator: that operator depends on the editor state and did nothing in some sessions.
 
-**The ID mask.** The image `CB_ID` (inside Blender) and the file `<name>_ID.png` next to the FBX on export: every band is filled with the colour of its group, the background is dark grey. How to texture:
+   Scale in tile units per metre (a 9 x 5 x 6 building): a band per group and no cut 0.0136, one free layout 0.0231, plus the slab cut at 9 m 0.0298 (that is 61 px per metre in a 2048 texture, against 28).
 
-* In Substance Painter, Photoshop or Marmoset pick the material by the mask colour: red is concrete, green debris, blue steel formwork props, yellow railings, cyan timber formwork beams, magenta lamps.
+**The ID mask.** The image `CB_ID` (inside Blender) and the file `<name>_ID.png` next to the FBX on export: the place of every stack is filled with the colour of its group, the background is dark grey. How to texture:
+
+* In Substance Painter, Photoshop or Marmoset pick the material by the mask colour: red is concrete, green debris, blue steel formwork props, yellow railings, cyan timber formwork beams, magenta lamps, orange floors, violet ceilings.
 * In Blender the group materials (`CB_Concrete` and the others) are flat ID colours, so in Material Preview the groups show in different colours at once. On export by default there is one material, `CB_Building` (see Export).
-* A group band takes the full tile width, so the mask is just horizontal stripes.
+* The mask is checked by a test: the colour under the centre of every polygon is the colour of its group (24,000 polygons, no mismatch).
 
 ### Single mesh
 
 The `Single Mesh` checkbox (in the Export block) merges all parts into **one mesh, `CB_Building`**: slabs, columns, walls, shafts, stairs, formwork, railings, lamps and debris. That is easier to texture, for example in Substance Painter: one object and one UV.
 
-* The UV stays as it was: the shared 0-1 tile, groups in bands, stacks of similar islands. The vertex count, face count, smoothing and UVs of the merged mesh equal the sum of the parts (checked by a test).
+* The UV stays as it was: the shared 0-1 tile, groups, stacks of similar islands. The vertex count, face count, smoothing and UVs of the merged mesh equal the sum of the parts (checked by a test).
 * There is one material, `CB_Building` (one texture set). It shows the ID mask as the base colour, so in Material Preview the groups show in different colours. The group materials (`CB_Concrete` and the others) are not set in this mode, or Substance would get several texture sets on one UV. Pick the group by colour from `<name>_ID.png`.
 * The merge works on mesh data, not with the Join operator: that operator depends on the editor state.
 * Rebuild recreates `CB_Building` every time. Turn the checkbox off and press Rebuild to get the separate objects back, and `CB_Building` disappears.
