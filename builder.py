@@ -537,7 +537,7 @@ def build_floors(props, offset):
 
 
 def build_columns(props, offset):
-    """One box per grid node, ground to top, through the slabs.
+    """One box per grid node, from `column_foot` below the ground to the top, through the slabs.
 
     Each column rises above the top slab by `column_extension` plus a random
     0..`column_height_variation` (seeded, so a Rebuild gives the same result).
@@ -550,7 +550,7 @@ def build_columns(props, offset):
     A column taller than `uv_column_cut` gets an edge loop every `uv_column_cut`
     metres (for the UV cut, see unwrap); lower columns are not changed.
 
-    Русский: Один бокс на узел сетки, от земли до верха, сквозь плиты.
+    Русский: Один бокс на узел сетки, от `column_foot` под землёй до верха, сквозь плиты.
     Каждая колонна поднимается над верхней плитой на `column_extension` плюс
     случайные 0..`column_height_variation` (с зерном, поэтому Rebuild даёт
     тот же результат). С `rebar` из каждой верхушки торчит группа 3×3 тонких
@@ -591,11 +591,11 @@ def build_columns(props, offset):
             if props.shaft_columns == "TRIM":
                 top = roof  # ends at the roof slab / кончается на плите крыши
                 rebar = False
-        # no bottom face: the column foot is buried in the ground
-        # нижней грани нет: пята колонны в земле
+        # no bottom face: the column foot goes `column_foot` below the ground, through the ground slab
+        # нижней грани нет: пята колонны уходит на `column_foot` под землю, сквозь плиту на земле
         faces = _add_box(
             bm,
-            (cx - half_x, cy - half_y, 0.0),
+            (cx - half_x, cy - half_y, 0.0 - props.column_foot),
             (cx + half_x, cy + half_y, top),
             bottom=False,
         )
@@ -1035,8 +1035,6 @@ def build_debris(props, offset):
     ox, oy = offset
     seed = props.random_seed
     floors, _ok = parse_floor_set(props.debris_floors, props.floors + 1)
-    if props.podium:  # debris starts from floor 2, above the podium / мусор начинается со 2-го этажа, над стилобатом
-        floors = {f for f in floors if f > 1}
     cells = sorted(footprint_cells(props) - shaft_cells(props) - stair_cells(props))
     h_lo, h_hi = sorted(props.debris_height)
     l_lo, l_hi = sorted(props.debris_length)
@@ -1356,6 +1354,25 @@ def build_formwork(props, offset, beams=False):
     high = FORMWORK_TUBE_HIGH / 2
     collar = FORMWORK_COLLAR / 2
     plate = FORMWORK_PLATE / 2
+    jitter = props.formwork_jitter
+    margin = max(props.column_width, props.column_depth) / 2 + plate + 0.05
+    if props.formwork_tripods:  # the tripod legs reach out too / раскосы треноги тоже вылетают
+        margin = max(margin, leg_reach + 0.05)
+    # a prop stays this far from the module edge, clear of the corner columns and inside the building
+    # стойка держится на таком расстоянии от края модуля, мимо угловых колонн и внутри здания
+
+    def scatter(value, origin, key):
+        """`value` moved by a random amount within +-`formwork_jitter`, kept inside the module.
+
+        Seeded by `key`, so the steel and the timber (two calls) agree and a Rebuild repeats it.
+        Русский: `value`, сдвинутое на случайную величину в пределах +-`formwork_jitter`, внутри
+        модуля. Зерно по `key`: сталь и дерево (два вызова) совпадают, Rebuild повторяет результат.
+        """
+        if jitter <= 0.0:
+            return value
+        shift = random.Random(f"{props.random_seed}|formwork-jitter|{key}").uniform(-jitter, jitter)
+        return min(max(value + shift, min(origin + margin, value)), max(origin + size - margin, value))
+
     holes = slab_holes(props)
     built = cell_floors(props)
     first = min((propped_from(props, built[c]) for c in cells), default=props.floors + 1)  # the lowest propped slab in any part / самая нижняя плита со стойками в любой части
@@ -1396,7 +1413,7 @@ def build_formwork(props, offset, beams=False):
                     (x + FORMWORK_JOIST_W / 2, y0 + size + past_hi, z_under),
                 )
             for ky in range(count):
-                y = y0 + (ky + 0.5) * pitch
+                y = scatter(y0 + (ky + 0.5) * pitch, y0, f"row|{level}|{i}|{j}|{ky}")  # the row and its beam move together / ряд и его балка сдвигаются вместе
                 if beams:  # the beam along X on the heads / балка вдоль X на головках
                     past_lo = overhang()
                     past_hi = overhang()
@@ -1410,7 +1427,7 @@ def build_formwork(props, offset, beams=False):
                         (x0 + size + past_hi, y + FORMWORK_BEARER_W / 2, z_joist),
                     )
                 for kx in range(0 if beams else count):
-                    x = x0 + (kx + 0.5) * pitch
+                    x = scatter(x0 + (kx + 0.5) * pitch, x0, f"prop|{level}|{i}|{j}|{ky}|{kx}")
                     hole = holes.get((level - 1, (i, j)))  # no prop stands over a hole / стойка не стоит над отверстием
                     if hole is not None and _hole_blocks(hole, x, y, plate + 0.05):
                         continue

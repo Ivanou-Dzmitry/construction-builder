@@ -58,7 +58,7 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | Cut Width / Depth | Size of the cut-out block in modules (L and U only) | 2 / 2 |
 | Floor Height | Distance between neighbouring slabs, m | 3 |
 | Module Size | Side of a square module and the column grid step, m | 3 |
-| Podium | Podium (stylobate): the first storey is several times taller, with the shaft and stairs but no partitions. Walls, debris and railings start from floor 2 | off |
+| Podium | Podium (stylobate): the first storey is several times taller, with the shaft and stairs but no partitions. Walls and railings start from floor 2, debris stays on every floor | off |
 | Podium Height | How many normal storeys tall the first storey is (podium only) | 2 |
 | Unfinished Part | One side of the building is lower, not built yet (see Unfinished part below) | off |
 | Side | Which side is lower: +X, -X, +Y or -Y (unfinished part only) | +X |
@@ -70,6 +70,7 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | Ground Slab | A slab at ground level so the building stands on the ground. Top at Z = 0, it has its edge thickness, no bottom face (it is in the ground) | on |
 | Column Size (Width/Depth) | Column size along X / along Y, m | 0.4 / 0.4 |
 | Column Top Extension | How far the columns stick out above the top slab, m (like rebar stubs on a real site) | 1 |
+| Foot Depth | How far the columns go below the ground (Z = 0), m, so they do not hang above it. 0 = they start at ground level | 0.5 |
 | Height Variation | Each column rises above the top slab by a further random height from 0 to this value, m, so the tops differ | 0.5 |
 | Seed | Random seed: with the same value Rebuild gives the same column heights, rebar, walls, doors, railings, debris, lamps and holes | 1 |
 | Rebar | Add rebar: 9 rods on top of every column | on |
@@ -98,6 +99,7 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | Formwork Props | Formwork props under the top slabs | on |
 | Top Slabs (Formwork) | How many of the top slabs are propped | 2 |
 | Spacing | Distance between props, m (rounded so that a whole number fits in a module) | 1.5 |
+| Randomness | Every prop (and every row with its beam) moves by a random distance up to this value, m. 0 = a perfect grid | 0.4 |
 | Overhang | At the outer edge of the building the timber beams stick out past the slab by a random length from a quarter of this value up to it, m. 0 = flush with the slab | 0.4 |
 | Tripods | Three legs on the floor around every prop. Turn off for fewer polygons | on |
 | Railings | Railings on the open slab edges | on |
@@ -157,7 +159,7 @@ Do not rename them: Rebuild finds and updates the old result by these names. Any
 ### Slabs
 
 * A slab is made of square modules (3×3 m by default).
-* **Ground slab** (`Ground Slab`, on by default): a slab like the others with its top at Z = 0 and its thickness going down. Its underside is in the ground, so it has **no bottom face**, while the top and the edges along the contour stay (the thickness is visible). It is solid: there is no hole under a shaft or stair, they stand on it. Everything above (walls, stairs, debris on floor 1) keeps the same heights. Columns start at Z = 0.
+* **Ground slab** (`Ground Slab`, on by default): a slab like the others with its top at Z = 0 and its thickness going down. Its underside is in the ground, so it has **no bottom face**, while the top and the edges along the contour stay (the thickness is visible). It is solid: there is no hole under a shaft or stair, they stand on it. Everything above (walls, stairs, debris on floor 1) keeps the same heights. Columns go below the slab (`Foot Depth`).
 * The first floor slab stands one storey up. With `Ground Slab` off there is no slab at ground level and the columns start from zero.
 * The top of the last slab is at `Floors × Floor Height` (plus the podium extra).
 * **Modules are stitched into one mesh.** Every module has a top and a bottom, and side faces only where it has no neighbour:
@@ -173,7 +175,7 @@ Do not rename them: Rebuild finds and updates the old result by these names. Any
 * A column stands at every node of the module grid, that is at every corner of every module.
 * A column runs from the ground to the top of the last slab plus `Column Top Extension`.
 * Columns simply **cross** the slabs: no boolean operations, the meshes are not merged.
-* A column has no bottom face: its foot goes into the ground.
+* A column has no bottom face: its foot goes `Foot Depth` (0.5 m by default) below the ground, deeper than the ground slab, so the column does not hang above the ground.
 * Above the top slab the columns have different heights: `Column Top Extension` plus a random addition from 0 to `Height Variation` (depends on `Seed`).
 * **Rebar.** 9 thin boxes stick out of the top of every column, a 3×3 grid. Every rod has its own height: `Rebar Height` ± `Height Random`. A rod starts a little inside the column and has no bottom face. All rod faces are smooth-shaded (one smoothing group), column faces stay flat. Turn it off with the `Rebar` checkbox. The rods are part of the `CB_Columns` mesh and share its UVs.
 
@@ -235,7 +237,7 @@ The building is a set of modules: a block is cut out of the `Modules X` × `Modu
 Telescopic steel props under freshly poured slabs: the building is obviously under construction. Made after photos of real formwork.
 
 * Props stand on the **top floors**, under the `Top Slabs` top slabs (two by default). One slab gives props only on the very top floor.
-* Every module gets a grid of props about `Spacing` apart (4 props per module at 3 m and 1.5 m). The grid is centred in the module, away from its edges, so the props do not cross the columns and walls.
+* Every module gets a grid of props about `Spacing` apart (4 props per module at 3 m and 1.5 m). The grid is centred in the module, away from its edges, so the props do not cross the columns and walls. `Randomness` (0.4 m) then moves every prop a little, and every row of props together with its beam, so they do not stand in a perfect line; the props stay clear of the corner columns and inside the building.
 * A prop: a base plate, a **thick lower tube, a collar and a thinner upper tube**, a head plate. With `Tripods` on, every prop has **three legs** on the floor. All simple boxes, the legs are thin tilted bars.
 * Two layers of timber beams on top, like in the photo: a bearer along X over a row of props lies on the head plates, and thinner beams (about every 0.75 m) lie across it right under the slab.
 * **Beams stick out past the edge.** At the outer edge of the building every beam sticks out past the slab by its own random length (from a quarter of `Overhang` up to it), so the lengths differ a little, as in life. Both the cross beams and the bearers have overhangs. At shaft and stair openings the beams stop at the edge.
@@ -261,7 +263,7 @@ A building with a podium (stylobate): the first storey is taller than the others
 
 * The `Podium` checkbox and `Podium Height`: the first storey is 2 (or 3, 4...) times taller than normal. Everything above moves up by the difference.
 * The podium **has** the elevator shaft and the stair but **no partitions**.
-* Walls, debris and railings start **from floor 2**. If floor 1 is in `Wall Floors`, there are still no walls on it. Railings stand first on the roof of the podium.
+* Walls and railings start **from floor 2**. Debris stays on every floor, the podium floor included. If floor 1 is in `Wall Floors`, there are still no walls on it. Railings stand first on the roof of the podium.
 * On the tall floor the stair is built as several normal levels one above the other, so the step height stays normal. The elevator still has a door on every floor, on the tall floor one door.
 * Formwork props under the podium slab come out tall (up to a storey 2 times taller).
 * Without a podium the building stays exactly the same as before (checked with a bit-for-bit comparison on 5 configurations).
@@ -360,7 +362,7 @@ The `Single Mesh` checkbox (in the Export block) merges all parts into **one mes
 
 * All objects are exported to one FBX file (meshes only). With `Single Mesh` that is one object, `CB_Building`.
 * **One material.** With the `One Material` checkbox (on) every object gets the single material `CB_Building` with the ID mask as base colour for the duration of the export. The FBX has one material and one texture set, the groups are told apart by `<name>_ID.png`. The coloured group materials come back in Blender afterwards. Checked by re-importing the FBX: one material on all objects, six without the checkbox.
-* The default file is `ConstructionBuilder.fbx`. The name is changed in the **File** field. With `ID Mask` on, `<name>_ID.png` is saved next to it.
+* The file name is made by **Rebuild** from the building: `c` + floors + `_` + modules X-Y + `_` + shape (R, L or U), for example `c10_8-8_L.fbx` (10 floors, 8 x 8 modules, L shape). You can edit it in the **File** field; turn `Auto Name` off to keep your own name. Without a Rebuild the default is `ConstructionBuilder.fbx`. With `ID Mask` on, `<name>_ID.png` is saved next to it.
 * The default folder is `ConstructionBuilder` next to the .blend file. If the file is not saved, it is created in `Documents`. Another folder can be chosen in the **Folder** field.
 * If you press **Export FBX** before the first Rebuild, you get the message "Press Rebuild first".
 

@@ -4,6 +4,46 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.26.0
+
+**English**
+
+* Debris is no longer removed from the podium floor: with `Podium` on, floor 1 gets its debris boxes like every other floor (before, debris started from floor 2 and the tall first storey was empty). Walls and railings still start from floor 2. Without a podium the geometry did not change (bit-for-bit comparison, 45 of 45 objects).
+
+**Русский**
+
+* Мусор больше не убирается с этажа стилобата: при включённом `Podium` на этаже 1 стоят боксы мусора, как на остальных этажах (раньше мусор начинался со 2-го этажа, и высокий первый этаж был пустым). Стены и ограждения по-прежнему начинаются со 2-го этажа. Без стилобата геометрия не изменилась (побитовое сравнение, 45 из 45 объектов).
+
+## 0.25.0
+
+**English**
+
+* **Foot Depth** (`Foot Depth` in Columns, 0.5 m by default, 0 = as before): the columns used to start exactly at Z = 0, on top of the ground slab, and looked as if they hung above the ground. Now they go 0.5 m below the ground, through the ground slab (0.3 m thick by default). Columns still have no bottom face. Only the column meshes change (they are longer by `Foot Depth`); with `Foot Depth` = 0 the geometry did not change (bit-for-bit comparison, 45 of 45 objects).
+
+**Русский**
+
+* **Заглубление колонн** (`Foot Depth` в Columns, по умолчанию 0.5 м, 0 = как раньше): колонны начинались ровно на Z = 0, на плите на земле, и казалось, что они висят над землёй. Теперь они уходят на 0.5 м под землю, сквозь плиту на земле (по умолчанию толщиной 0.3 м). Нижней грани у колонн по-прежнему нет. Меняются только меши колонн (длиннее на `Foot Depth`); при `Foot Depth` = 0 геометрия не изменилась (побитовое сравнение, 45 из 45 объектов).
+
+## 0.24.0
+
+**English**
+
+* **Randomness** (`Randomness` in Formwork Props, 0.4 m by default, 0 = perfect grid): the props no longer stand in a perfect grid. Every prop moves by a random distance up to this value, and every row of props moves with its timber beam, so the heads still lie under a beam. Props keep clear of the corner columns and stay inside the building (the tripod legs are counted, so the margin from the module edge is about 0.55 m). Seeded, so a Rebuild repeats it; the steel and the timber agree. With `Randomness` = 0 the geometry did not change (bit-for-bit comparison, 45 of 45 objects).
+
+**Русский**
+
+* **Разброс** (`Randomness` в Formwork Props, по умолчанию 0.4 м, 0 = идеальная сетка): стойки больше не стоят идеальной сеткой. Каждая стойка сдвигается на случайное расстояние до этого значения, а каждый ряд стоек сдвигается вместе со своей деревянной балкой, так что головки по-прежнему лежат под балкой. Стойки держатся подальше от угловых колонн и остаются внутри здания (раскосы треноги учитываются, поэтому отступ от края модуля около 0.55 м). С зерном, Rebuild повторяет результат; сталь и дерево согласованы. При `Randomness` = 0 геометрия не изменилась (побитовое сравнение, 45 из 45 объектов).
+
+## 0.23.0
+
+**English**
+
+* **Auto Name** (`Auto Name`, on by default): every Rebuild writes the file name from the building into the `File` field: `c` + floors + `_` + modules X-Y + `_` + shape (R, L or U), for example `c10_8-8_L`. You can still edit the name by hand after a Rebuild; turn the checkbox off to keep your own name. The FBX and the ID mask (`<name>_ID.png`) get this name.
+
+**Русский**
+
+* **Авто-имя** (`Auto Name`, по умолчанию вкл.): каждый Rebuild записывает в поле `File` имя файла по зданию: `c` + этажи + `_` + модули X-Y + `_` + форма (R, L или U), например `c10_8-8_L`. После Rebuild имя можно поправить руками; чтобы сохранить своё имя, выключите галку. Это имя получают FBX и ID-маска (`<имя>_ID.png`).
+
 ## 0.22.0
 
 **English**

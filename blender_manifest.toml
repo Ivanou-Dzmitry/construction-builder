@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "construction_builder"
-version = "0.22.0"
+version = "0.26.0"
 name = "ConstructionBuilder"
 tagline = "Building frame generator: floor slabs, columns, UV, FBX export"
 maintainer = "Dzmitry Ivanou <id.cgtalk@gmail.com>"

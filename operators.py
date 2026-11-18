@@ -133,6 +133,15 @@ class CB_Props(bpy.types.PropertyGroup):
         min=0.0,
         unit="LENGTH",
     )
+    column_foot: FloatProperty(
+        name="Foot Depth",
+        description="How far the columns go below the ground (Z = 0), so they do "
+        "not hang above it. The default is deeper than the ground slab. 0 = the "
+        "columns start at ground level",
+        default=0.5,
+        min=0.0,
+        unit="LENGTH",
+    )
     column_height_variation: FloatProperty(
         name="Height Variation",
         description="Each column gets a random extra 0..this height above the "
@@ -433,6 +442,16 @@ class CB_Props(bpy.types.PropertyGroup):
         "on real props. Turn off for fewer polygons",
         default=True,
     )
+    formwork_jitter: FloatProperty(
+        name="Randomness",
+        description="Every prop is moved by a random distance up to this value, "
+        "and every row of props with its beam too, so they do not stand in a "
+        "perfect grid. Props stay clear of the corner columns. 0 = a perfect grid",
+        default=0.4,
+        min=0.0,
+        soft_max=1.0,
+        unit="LENGTH",
+    )
     formwork_spacing: FloatProperty(
         name="Spacing",
         description="Distance between props, metres (rounded so a whole number "
@@ -491,7 +510,7 @@ class CB_Props(bpy.types.PropertyGroup):
         name="Podium",
         description="A podium (stylobate): the first storey is several normal "
         "storeys tall. It keeps the shafts and stairs but has no partitions; "
-        "walls, debris and railings start from floor 2",
+        "walls and railings start from floor 2 (debris stays on every floor)",
         default=False,
     )
     podium_levels: IntProperty(
@@ -701,6 +720,13 @@ class CB_Props(bpy.types.PropertyGroup):
         subtype="DIR_PATH",
         default="",
     )
+    auto_name: BoolProperty(
+        name="Auto Name",
+        description="Rebuild writes the file name from the building into File: c, "
+        "floors, modules X-Y, shape (R, L or U), for example c10_8-8_L. You can "
+        "still edit it. Turn off to keep your own name",
+        default=True,
+    )
     file_name: StringProperty(
         name="File",
         description="FBX file name",
@@ -721,6 +747,18 @@ def export_folder(props):
     else:
         base = os.path.join(os.path.expanduser("~"), "Documents")
     return os.path.join(base, "ConstructionBuilder")
+
+
+def auto_file_name(props):
+    """The file name made from the building: c<floors>_<modules X>-<modules Y>_<shape>.
+
+    The shape letter is R (rectangle), L or U. For example `c10_8-8_L`.
+
+    Русский: Имя файла, собранное из здания: c<этажи>_<модули X>-<модули Y>_<форма>.
+    Буква формы: R (прямоугольник), L или U. Например `c10_8-8_L`.
+    """
+    letter = {"RECT": "R", "L": "L", "U": "U"}[props.shape]
+    return f"c{props.floors}_{props.modules_x}-{props.modules_y}_{letter}"
 
 
 def export_path(props):
@@ -776,6 +814,8 @@ class CB_OT_rebuild(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.construction_builder
         objs = builder.rebuild(context, props)
+        if props.auto_name:  # the name follows the building on every Rebuild / имя следует за зданием при каждом Rebuild
+            props.file_name = auto_file_name(props)
         polys = ", ".join(f"{o.name}: {len(o.data.polygons)}" for o in objs)
         self.report({"INFO"}, f"{_rpt('Built')} {polys} {_rpt('polygons')}")
         return {"FINISHED"}
@@ -945,6 +985,7 @@ class CB_PT_main(bpy.types.Panel):
         box.label(text="Columns", icon="MESH_CUBE")
         _pair(box, props, "Size (Width/Depth)", "column_width", "column_depth")
         box.prop(props, "column_extension")
+        box.prop(props, "column_foot")
         col = box.column(align=True)
         col.prop(props, "column_height_variation")
         col.prop(props, "random_seed")
@@ -1007,6 +1048,7 @@ class CB_PT_main(bpy.types.Panel):
         sub.active = props.formwork
         sub.prop(props, "formwork_levels")
         sub.prop(props, "formwork_spacing")
+        sub.prop(props, "formwork_jitter")
         sub.prop(props, "formwork_overhang")
         sub.prop(props, "formwork_tripods")
 
@@ -1089,6 +1131,7 @@ class CB_PT_main(bpy.types.Panel):
         box.prop(props, "export_one_material")
         box.prop(props, "export_dir")
         box.prop(props, "file_name")
+        box.prop(props, "auto_name")
         row = box.row(align=True)
         row.operator("construction_builder.export_fbx", icon="EXPORT")
         row.operator("construction_builder.open_folder", icon="FILE_FOLDER")
