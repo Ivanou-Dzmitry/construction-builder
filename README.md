@@ -301,6 +301,8 @@ Boxes of different height and length on the floors, so the frame looks lived-in 
 
 The whole building shares **one UV map** (one texture for everything, tile 0-1).
 
+![UV layout of a 12-floor building: one tile, every group in its own colour (the ID mask colours)](docs/uv_layout.png)
+
 1. **Box projection in world metres**: 1 m = 1 UV unit, so the texel density is the same everywhere. Every face is projected along the dominant axis of its normal, "up" stays up, the texture is not mirrored.
 2. **Groups.** With `Group by Material` every UV island belongs to a group. Islands of different groups never stack on each other, so every place of the tile has exactly one colour in the ID mask:
 

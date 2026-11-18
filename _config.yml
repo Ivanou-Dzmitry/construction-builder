@@ -1,0 +1,8 @@
+# GitHub Pages: the README is the home page / README это главная страница
+title: ConstructionBuilder
+description: Blender extension that builds a building under construction / Расширение Blender для строящегося здания
+theme: jekyll-theme-cayman
+exclude:
+  - dist
+  - "*.py"
+  - blender_manifest.toml
