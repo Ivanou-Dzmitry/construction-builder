@@ -20,5 +20,5 @@ paths_exclude_pattern = [
   "__pycache__/",
   "/dist/",
   "/.git/",
-  "/.gitignore",
+  "/.gitignore", "/docs/",
 ]
