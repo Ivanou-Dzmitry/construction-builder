@@ -6,11 +6,11 @@
 
 ![Two taller buildings, 15 and 12 floors](docs/preview2.webp)
 
-![A close view with the wireframe: stairs, formwork props, railings and rebar](docs/preview3.webp)
-
 A Blender 5.2+ extension that builds the frame of a building under construction: floor slabs, columns with rebar, interior walls, elevator shafts, fire stairs, formwork props, railings, construction lamps and debris, like a cast-in-place reinforced-concrete house at the "bare frame" stage. The result is ready for a game engine: every object has UVs (box projection, packed into one 0-1 tile), and FBX export is one button.
 
 The building can be a rectangle, an L shape, a U shape, or have a podium (a tall first storey).
+
+![A close view with the wireframe: stairs, formwork props, railings and rebar](docs/preview3.webp)
 
 ## Installation
 
