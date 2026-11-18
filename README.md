@@ -8,7 +8,7 @@ A Blender 5.2+ extension that builds the frame of a building under construction:
 
 ![Two taller buildings, 15 and 12 floors](docs/preview2.webp)
 
-The building can be a rectangle, an L shape, a U shape, or have a podium (a tall first storey).
+The building can be a rectangle, an L shape, a U shape, or have a podium (a tall first storey). One side can also be left unfinished: lower than the rest, as on a real site.
 
 ## Installation
 
@@ -60,6 +60,10 @@ Paired fields (for example Width/Depth) share one row in the panel.
 | Module Size | Side of a square module and the column grid step, m | 3 |
 | Podium | Podium (stylobate): the first storey is several times taller, with the shaft and stairs but no partitions. Walls, debris and railings start from floor 2 | off |
 | Podium Height | How many normal storeys tall the first storey is (podium only) | 2 |
+| Unfinished Part | One side of the building is lower, not built yet (see Unfinished part below) | off |
+| Side | Which side is lower: +X, -X, +Y or -Y (unfinished part only) | +X |
+| Width | How many module rows on that side are lower (unfinished part only) | 3 |
+| Missing Floors | How many storeys that part lacks (unfinished part only) | 2 |
 | Edge Bias | Random details (lamps, holes, debris) gather near the outer edge of the building. The chance in the deepest module is this much lower than at the edge: 0 = even, 1 = none in the middle | 0.7 |
 | Center on Origin | Centre the building on the origin (otherwise its corner sits at the origin) | off |
 | Slab Thickness | Slab thickness, m | 0.3 |
@@ -261,6 +265,17 @@ A building with a podium (stylobate): the first storey is taller than the others
 * On the tall floor the stair is built as several normal levels one above the other, so the step height stays normal. The elevator still has a door on every floor, on the tall floor one door.
 * Formwork props under the podium slab come out tall (up to a storey 2 times taller).
 * Without a podium the building stays exactly the same as before (checked with a bit-for-bit comparison on 5 configurations).
+
+### Unfinished part
+
+A real site is rarely even: one wing is already five floors up while the other is still being cast. The `Unfinished Part` checkbox makes one side of the building lower.
+
+* `Side` (+X, -X, +Y, -Y) is the side that is lower, `Width` is how many module rows on that side, `Missing Floors` is how many storeys they lack. It works with any shape: for a U the legs can stay low while the bar goes up, for an L the arm.
+* The lower part has **no** slabs, walls, stairs, lamps, debris or railings above its own roof. Its **columns stand at the roof height with the rebar sticking out**, as before the next floor is cast.
+* The formwork props stand under the **top slabs of every part**: the low part is propped under its own roof, the tall one under its own.
+* The taller part gets railings along the step edge. Shafts and stairs that stand in the lower part end at its roof. A wall between a low and a tall module is as high as the low one.
+* At least one storey and at least one module row always keep the full height, whatever the numbers say.
+* Without the option the building stays exactly the same as before (checked with a bit-for-bit comparison, 45 of 45 objects).
 
 ### Edge bias
 

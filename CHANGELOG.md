@@ -4,6 +4,22 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.22.0
+
+**English**
+
+* **Unfinished part** (`Unfinished Part`, `Side`, `Width`, `Missing Floors`; off by default): one side of the building is lower, as if the rest has already risen and this part is not built yet. `Side` is +X / -X / +Y / -Y, `Width` is how many module rows on that side are lower, `Missing Floors` is how many storeys they lack. It works for any shape: the legs of a U or the arm of an L can stay low while the bar goes up.
+* The lower part has no upper slabs, walls, stairs, shafts, lamps, debris or railings above its own roof. Its columns stand at the roof height with the rebar sticking out, its formwork props are under its own top slabs, its railings fence its roof and every step edge of the taller part, its shafts and stairs end at its roof. A wall between a low and a tall module is as high as the low one.
+* At least one storey and at least one module row always keep full height, whatever the numbers say.
+* Without the option the geometry did not change (bit-for-bit comparison, 45 of 45 objects). 11 configurations are tested (RECT, L, U, podium, 1 floor, all sides): nothing stands above the roof of the lower part, the ID mask has no wrong polygon, the UVs stay in the tile.
+
+**Русский**
+
+* **Недостроенная часть** (`Unfinished Part`, `Side`, `Width`, `Missing Floors`; по умолчанию выкл.): одна сторона здания ниже, как будто остальное уже выросло, а эта часть ещё не построена. `Side` это +X / -X / +Y / -Y, `Width` сколько рядов модулей с этой стороны ниже, `Missing Floors` сколько этажей им не хватает. Работает для любой формы: ноги П или рукав Г могут остаться низкими, пока перемычка идёт вверх.
+* В низкой части нет верхних плит, стен, лестниц, шахт, ламп, мусора и ограждений выше её собственной крыши. Колонны стоят до высоты её крыши с торчащей арматурой, стойки опалубки стоят под её собственными верхними плитами, ограждения идут по её крыше и по каждому краю ступеньки высокой части, шахты и лестницы кончаются на её крыше. Стена между низким и высоким модулем такой же высоты, как низкий.
+* Хотя бы один этаж и хотя бы один ряд модулей всегда остаются полной высоты, какие бы числа ни ввели.
+* Без этой опции геометрия не изменилась (побитовое сравнение, 45 из 45 объектов). Проверено 11 конфигураций (RECT, Г, П, стилобат, 1 этаж, все стороны): над крышей низкой части ничего нет, в ID-маске нет неверных полигонов, UV остаются в тайле.
+
 ## 0.21.0
 
 **English**

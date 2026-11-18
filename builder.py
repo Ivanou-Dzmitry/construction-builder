@@ -248,6 +248,55 @@ def total_height(props):
     return slab_top(props, props.floors)
 
 
+def cell_floors(props):
+    """{module: how many storeys it has} for every module of the building.
+
+    Normally every module has `floors` storeys. With `unfinished`, the modules in
+    the `unfinished_modules` outermost rows on the `unfinished_side` of the
+    building are `unfinished_floors` storeys lower: the rest of the building has
+    risen higher and this part is not built yet. At least one storey and at least
+    one module row stay at full height.
+
+    Русский: {модуль: сколько в нём этажей} для каждого модуля здания. Обычно у
+    каждого модуля `floors` этажей. С `unfinished` модули в `unfinished_modules`
+    крайних рядах со стороны `unfinished_side` ниже на `unfinished_floors`
+    этажей: остальное здание уже выросло выше, а эта часть ещё не построена.
+    Всегда остаются хотя бы один этаж и хотя бы один ряд модулей полной высоты.
+    """
+    footprint = footprint_cells(props)
+    count = props.floors
+    if not props.unfinished:
+        return {c: count for c in footprint}
+    lag = max(min(props.unfinished_floors, count - 1), 0)
+    nx, ny = props.modules_x, props.modules_y
+    side = props.unfinished_side
+    width = props.unfinished_modules
+    if side in ("PX", "NX"):
+        width = min(width, nx - 1)
+    else:
+        width = min(width, ny - 1)
+
+    def lagging(cell):
+        if side == "PX":
+            return cell[0] >= nx - width
+        if side == "NX":
+            return cell[0] < width
+        if side == "PY":
+            return cell[1] >= ny - width
+        return cell[1] < width
+
+    return {c: count - (lag if lagging(c) else 0) for c in footprint}
+
+
+def propped_from(props, storeys):
+    """The lowest slab with formwork props under it in a part that has `storeys` storeys.
+
+    Русский: Самая нижняя плита, под которой стоят стойки опалубки, в части с
+    `storeys` этажами.
+    """
+    return storeys - min(props.formwork_levels, storeys) + 1
+
+
 def detail_weights(props):
     """{module: weight 0..1} that makes random details gather near the edge.
 
@@ -326,8 +375,11 @@ def slab_holes(props):
     holes = {}
     if free < 0.2:
         return holes
+    built = cell_floors(props)
     for slab in range(1, props.floors + 1):
         for i, j in sorted(cells):
+            if built[(i, j)] < slab:  # this part has no such slab yet / в этой части такой плиты ещё нет
+                continue
             if _roll(seed, "hole", slab, i, j) >= props.hole_factor * weights[(i, j)]:
                 continue
             rng = random.Random(f"{seed}|hole-shape|{slab}|{i}|{j}")
@@ -454,6 +506,7 @@ def build_floors(props, offset):
     footprint = footprint_cells(props)
     upper = footprint - shaft_cells(props) - stair_cells(props)  # holes / дыры
     holes = slab_holes(props)
+    built = cell_floors(props)
     ox, oy = offset
     bm = bmesh.new()
 
@@ -478,7 +531,7 @@ def build_floors(props, offset):
     if props.ground_slab:
         add_slab(footprint, 0.0, buried=True)
     for floor in range(1, props.floors + 1):
-        add_slab(upper, slab_top(props, floor), slab=floor)
+        add_slab({c for c in upper if built[c] >= floor}, slab_top(props, floor), slab=floor)
     bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=MERGE_DISTANCE)
     return bm
 
@@ -510,9 +563,11 @@ def build_columns(props, offset):
     size = props.module_size
     cells = footprint_cells(props)
     ox, oy = offset
-    nodes = set()
+    built = cell_floors(props)
+    nodes = {}  # grid node -> storeys of the tallest module around it / узел сетки -> этажи самого высокого модуля рядом
     for i, j in cells:
-        nodes.update(((i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)))
+        for node in ((i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)):
+            nodes[node] = max(nodes.get(node, 0), built[(i, j)])
     shaft_nodes = set()
     for i, j in shaft_cells(props):
         shaft_nodes.update(((i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)))
@@ -523,8 +578,9 @@ def build_columns(props, offset):
     for i, j in sorted(nodes):
         cx = i * size + ox
         cy = j * size + oy
+        roof = slab_top(props, nodes[(i, j)])  # the roof of the part this column stands in / крыша той части, где стоит колонна
         top = (  # drawn for every column, so the others never change with the shaft mode / считается для каждой колонны, поэтому остальные не меняются от режима колонн шахты
-            total_height(props)
+            roof
             + props.column_extension
             + rng.uniform(0.0, props.column_height_variation)
         )
@@ -533,7 +589,7 @@ def build_columns(props, offset):
             if props.shaft_columns == "REMOVE":
                 continue
             if props.shaft_columns == "TRIM":
-                top = total_height(props)  # ends at the roof slab / кончается на плите крыши
+                top = roof  # ends at the roof slab / кончается на плите крыши
                 rebar = False
         # no bottom face: the column foot is buried in the ground
         # нижней грани нет: пята колонны в земле
@@ -766,6 +822,7 @@ def build_walls(props, offset):
         floors = {f for f in floors if f > 1}
     seed = props.random_seed
     thickness = props.wall_thickness
+    built = cell_floors(props)
 
     # No partitions around the shafts, so they stay visible: every module within
     # `shaft_clear_radius` of a shaft (the shaft itself included) is left open.
@@ -786,19 +843,23 @@ def build_walls(props, offset):
             return False
         return _roll(seed, "wall", axis, i, j) < props.wall_chance
 
-    edges = []  # (axis, fixed, start, end, half column along the wall, key) / (ось, линия, начало, конец, половина колонны вдоль стены, ключ)
+    # The last item is how many storeys the wall has: the lower of the two modules it separates.
+    # Последний элемент: сколько этажей у стены: меньшее из двух модулей, которые она разделяет.
+    edges = []  # (axis, fixed, start, end, half column along the wall, key, storeys) / (ось, линия, начало, конец, половина колонны вдоль стены, ключ, этажи)
     for i, j in sorted(cells):
         if wanted("x", i, j, (i, j + 1)):  # wall along X, between two rows / стена вдоль X, между двумя рядами
-            edges.append(("x", (j + 1) * size, i * size, (i + 1) * size, props.column_width / 2, (i, j)))
+            edges.append(("x", (j + 1) * size, i * size, (i + 1) * size, props.column_width / 2, (i, j), min(built[(i, j)], built[(i, j + 1)])))
         if wanted("y", i, j, (i + 1, j)):  # wall along Y, between two columns / стена вдоль Y, между двумя столбцами модулей
-            edges.append(("y", (i + 1) * size, j * size, (j + 1) * size, props.column_depth / 2, (i, j)))
+            edges.append(("y", (i + 1) * size, j * size, (j + 1) * size, props.column_depth / 2, (i, j), min(built[(i, j)], built[(i + 1, j)])))
 
     bm = bmesh.new()
-    for axis, fixed, start, end, half, (ci, cj) in edges:
+    for axis, fixed, start, end, half, (ci, cj), storeys in edges:
         a0 = start + half
         a1 = end - half
         length = a1 - a0
         for floor in sorted(floors):
+            if floor > storeys:
+                continue
             z0 = slab_top(props, floor - 1)
             z1 = slab_top(props, floor) - props.slab_thickness
             storey_h = z1 - z0
@@ -833,8 +894,11 @@ SHAFT_SIDES = (  # (axis, outward sign, name) / (ось, знак наружу, 
 )
 
 
-def _shaft_levels(props):
+def _shaft_levels(props, count=None):
     """Vertical segments of a shaft wall: [(z_lo, z_hi, is_storey)].
+
+    `count` is how many storeys the shaft has (`floors` when omitted).
+    `count` это число этажей шахты (без него `floors`).
 
     Storeys alternate with slab bands, so every side has vertices at the same
     heights (no T-junctions on the corner edges). Storeys can carry a door. The
@@ -847,14 +911,15 @@ def _shaft_levels(props):
     Последний отрезок это верхний блок над крышей (высотой
     `shaft_extension`): последний этаж шахты, в нём тоже есть дверь.
     """
+    count = props.floors if count is None else count
     floor_h = props.floor_height
     slab = props.slab_thickness
-    roof = total_height(props)
+    roof = slab_top(props, count)
     top = roof + props.shaft_extension
     if floor_h - slab <= 0.3:  # no room for a door: one plain wall / для двери нет места: одна глухая стена
         return [(0.0, top, False)]
     segments = []
-    for k in range(1, props.floors + 1):
+    for k in range(1, count + 1):
         z1 = slab_top(props, k) - slab
         segments.append((slab_top(props, k - 1), z1, True))
         segments.append((z1, slab_top(props, k), False))  # the slab band / полоса перекрытия
@@ -908,10 +973,15 @@ def build_shafts(props, offset):
     """
     size = props.module_size
     half = props.shaft_thickness / 2
-    segments = _shaft_levels(props)
-    top = total_height(props) + props.shaft_extension
+    built = cell_floors(props)
+    levels = {}  # storeys -> wall segments, so a shaft in a lower part is shorter / этажи -> отрезки стены, шахта в низкой части короче
     bm = bmesh.new()
     for i, j in sorted(shaft_cells(props)):
+        storeys = built[(i, j)]
+        if storeys not in levels:
+            levels[storeys] = _shaft_levels(props, storeys)
+        segments = levels[storeys]
+        top = slab_top(props, storeys) + props.shaft_extension
         x0, x1 = i * size, (i + 1) * size
         y0, y1 = j * size, (j + 1) * size
         for axis, sign, name in SHAFT_SIDES:
@@ -978,10 +1048,13 @@ def build_debris(props, offset):
         return bm
     weights = detail_weights(props)  # fewer boxes in the middle of the building / в середине здания боксов меньше
     holes = slab_holes(props)
+    built = cell_floors(props)
 
     for floor in sorted(floors):
         z = slab_top(props, floor - 1)  # floor of storey `floor`; 1 = ground / пол этажа `floor`; 1 = земля
         for i, j in cells:
+            if floor > built[(i, j)] + 1:  # above the roof of this part / выше крыши этой части
+                continue
             if _roll(seed, "debris", floor, i, j) >= props.debris_factor * weights[(i, j)]:
                 continue
             rng = random.Random(f"{seed}|debris-size|{floor}|{i}|{j}")
@@ -1149,7 +1222,9 @@ def build_stairs(props, offset):
     steps = max(1, round(half / STAIR_RISER_TARGET))
     riser = half / steps
     tread = flight_len / steps
+    built = cell_floors(props)
     for i, j in sorted(stair_cells(props)):
+        cell_levels = min(levels, built[(i, j)])  # a stair in a lower part is shorter / лестница в низкой части короче
         xa = i * size
         xb = xa + size
         y0 = j * size
@@ -1159,7 +1234,7 @@ def build_stairs(props, offset):
         origin = y0 if sign > 0 else y0 + size
         y_land = origin + sign * flight_len  # where the landing starts / где начинается площадка
         y_end = origin + sign * size  # the far side of the module / дальняя сторона модуля
-        for z_start in _stair_levels(props, levels):
+        for z_start in _stair_levels(props, cell_levels):
             z_mid = z_start + half
             if flight_style:
                 _stair_flight_solid(bm, xa, xa + flight_w, origin, sign, z_start, steps, tread, riser)
@@ -1282,8 +1357,10 @@ def build_formwork(props, offset, beams=False):
     collar = FORMWORK_COLLAR / 2
     plate = FORMWORK_PLATE / 2
     holes = slab_holes(props)
+    built = cell_floors(props)
+    first = min((propped_from(props, built[c]) for c in cells), default=props.floors + 1)  # the lowest propped slab in any part / самая нижняя плита со стойками в любой части
     bm = bmesh.new()
-    for level in range(props.floors - min(props.formwork_levels, props.floors) + 1, props.floors + 1):
+    for level in range(first, props.floors + 1):
         z_floor = slab_top(props, level - 1)  # top of the slab below (or the ground) / верх плиты ниже (или земли)
         z_under = slab_top(props, level) - slab  # underside of the slab above / низ плиты выше
         z_joist = z_under - FORMWORK_JOIST_H
@@ -1294,6 +1371,8 @@ def build_formwork(props, offset, beams=False):
             continue
         z_split = z_base + 0.55 * (z_head - z_base)  # where the two tubes meet / где сходятся две трубы
         for i, j in sorted(cells):
+            if not propped_from(props, built[(i, j)]) <= level <= built[(i, j)]:  # not a propped slab in this part / в этой части это не плита со стойками
+                continue
             x0 = i * size
             y0 = j * size
             rng = random.Random(f"{props.random_seed}|formwork|{level}|{i}|{j}")
@@ -1307,9 +1386,9 @@ def build_formwork(props, offset, beams=False):
                 x = x0 + (k + 0.5) * size / joists
                 past_lo = overhang()
                 past_hi = overhang()
-                if (i, j - 1) in footprint:  # a beam only sticks out past the building's edge / балка выступает только за край здания
+                if built.get((i, j - 1), 0) >= level:  # a beam only sticks out past the slab's edge / балка выступает только за край плиты
                     past_lo = 0.0
-                if (i, j + 1) in footprint:
+                if built.get((i, j + 1), 0) >= level:
                     past_hi = 0.0
                 _add_box(
                     bm,
@@ -1321,9 +1400,9 @@ def build_formwork(props, offset, beams=False):
                 if beams:  # the beam along X on the heads / балка вдоль X на головках
                     past_lo = overhang()
                     past_hi = overhang()
-                    if (i - 1, j) in footprint:
+                    if built.get((i - 1, j), 0) >= level:
                         past_lo = 0.0
-                    if (i + 1, j) in footprint:
+                    if built.get((i + 1, j), 0) >= level:
                         past_hi = 0.0
                     _add_box(  # the beam along X on the heads / балка вдоль X на головках
                         bm,
@@ -1472,29 +1551,28 @@ def build_railings(props, offset):
     stairs = stair_cells(props)
     cells = footprint - shafts - stairs
     floors, _ok = parse_floor_set(props.railing_floors, props.floors + 1)
-    built_up_to = min(props.stairs_up_to, props.floors)
-
-    edges = []  # (module, neighbour offset, is the stair's arrival side) / (модуль, смещение соседа, сторона выхода лестницы ли)
-    for i, j in sorted(cells):
-        for di, dj in ((0, -1), (0, 1), (-1, 0), (1, 0)):
-            neighbour = (i + di, j + dj)
-            if neighbour in shafts or (neighbour in footprint and neighbour not in stairs):
-                continue
-            arrival = False
-            if neighbour in stairs:
-                sign = stair_sign(footprint, *neighbour)
-                arrival = (i - neighbour[0], j - neighbour[1]) == (0, -sign)
-            edges.append(((i, j), (di, dj), arrival))
+    built = cell_floors(props)
+    stair_top = {c: min(props.stairs_up_to, built[c]) for c in stairs}  # how high each stair is built / как высоко построена каждая лестница
 
     bm = bmesh.new()
     for slab in range(1, props.floors + 1):
         if slab + 1 not in floors:  # floor numbers: 1 = ground, slab k is floor k + 1 / номера этажей: 1 = земля, плита k это этаж k + 1
             continue
-        for (i, j), (di, dj), arrival in edges:
-            if arrival and slab <= built_up_to:
+        for i, j in sorted(cells):
+            if built[(i, j)] < slab:  # this part has no such slab yet / в этой части такой плиты ещё нет
                 continue
-            rng = random.Random(f"{props.random_seed}|rail|{slab}|{i}|{j}|{di}|{dj}")
-            _add_railing(bm, props, i, j, di, dj, slab_top(props, slab), rng)
+            for di, dj in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                neighbour = (i + di, j + dj)
+                arrival = False
+                if built.get(neighbour, 0) >= slab:  # the neighbour module reaches this slab / соседний модуль доходит до этой плиты
+                    if neighbour in shafts or neighbour not in stairs:
+                        continue
+                    sign = stair_sign(footprint, *neighbour)
+                    arrival = (i - neighbour[0], j - neighbour[1]) == (0, -sign)
+                if arrival and slab <= stair_top[neighbour]:
+                    continue
+                rng = random.Random(f"{props.random_seed}|rail|{slab}|{i}|{j}|{di}|{dj}")
+                _add_railing(bm, props, i, j, di, dj, slab_top(props, slab), rng)
     for v in bm.verts:
         v.co.x += offset[0]
         v.co.y += offset[1]
@@ -1534,19 +1612,19 @@ def build_lamps(props, offset):
     holes = slab_holes(props)
     low, high = sorted(props.lamp_length)
     floors, _ok = parse_floor_set(props.lamp_floors, props.floors)
-    propped = set()
-    if props.formwork:
-        propped = set(range(props.floors - min(props.formwork_levels, props.floors) + 1, props.floors + 1))
+    built = cell_floors(props)
     room = size - 2 * LAMP_MARGIN
     bm = bmesh.new()
     if room < 0.3:
         return bm
     sides = ((1, 0), (-1, 0), (0, 1), (0, -1))
     for storey in sorted(floors):
-        if storey in propped:
-            continue
         z_under = slab_top(props, storey) - props.slab_thickness
         for i, j in cells:
+            if storey > built[(i, j)]:  # this part has no such slab yet / в этой части такой плиты ещё нет
+                continue
+            if props.formwork and storey >= propped_from(props, built[(i, j)]):  # a propped slab has no lamps / под плитой со стойками ламп нет
+                continue
             if _roll(seed, "lamp", storey, i, j) >= props.lamp_factor * weights[(i, j)]:
                 continue
             rng = random.Random(f"{seed}|lamp-shape|{storey}|{i}|{j}")

@@ -501,6 +501,40 @@ class CB_Props(bpy.types.PropertyGroup):
         min=2,
         max=6,
     )
+    unfinished: BoolProperty(
+        name="Unfinished Part",
+        description="One side of the building is not finished yet: it has fewer "
+        "storeys than the rest, so it has no upper slabs, walls, stairs and "
+        "props. Its columns stand with the rebar sticking out",
+        default=False,
+    )
+    unfinished_side: EnumProperty(
+        name="Side",
+        description="Which side of the building is lower",
+        items=[
+            ("PX", "+X (Right)", "The right end of the building"),
+            ("NX", "-X (Left)", "The left end of the building"),
+            ("PY", "+Y (Back)", "The back of the building"),
+            ("NY", "-Y (Front)", "The front of the building"),
+        ],
+        default="PX",
+    )
+    unfinished_modules: IntProperty(
+        name="Width",
+        description="How many module rows on that side are lower. At least one "
+        "row always keeps the full height",
+        default=3,
+        min=1,
+        soft_max=20,
+    )
+    unfinished_floors: IntProperty(
+        name="Missing Floors",
+        description="How many storeys that part lacks. At least one storey always "
+        "stays",
+        default=2,
+        min=1,
+        soft_max=20,
+    )
     edge_bias: FloatProperty(
         name="Edge Bias",
         description="Random details (lamps, holes, debris) gather near the outer "
@@ -886,6 +920,12 @@ class CB_PT_main(bpy.types.Panel):
         sub = box.column()
         sub.active = props.podium
         sub.prop(props, "podium_levels")
+        box.prop(props, "unfinished")
+        sub = box.column(align=True)
+        sub.active = props.unfinished
+        sub.prop(props, "unfinished_side")
+        sub.prop(props, "unfinished_modules")
+        sub.prop(props, "unfinished_floors")
         box.prop(props, "edge_bias")
         box.prop(props, "center_xy")
         width = props.modules_x * props.module_size
