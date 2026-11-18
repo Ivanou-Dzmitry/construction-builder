@@ -4,13 +4,11 @@
 
 ![ConstructionBuilder: a generated building under construction](docs/preview.webp)
 
-![Two taller buildings, 15 and 12 floors](docs/preview2.webp)
-
 A Blender 5.2+ extension that builds the frame of a building under construction: floor slabs, columns with rebar, interior walls, elevator shafts, fire stairs, formwork props, railings, construction lamps and debris, like a cast-in-place reinforced-concrete house at the "bare frame" stage. The result is ready for a game engine: every object has UVs (box projection, packed into one 0-1 tile), and FBX export is one button.
 
-The building can be a rectangle, an L shape, a U shape, or have a podium (a tall first storey).
+![Two taller buildings, 15 and 12 floors](docs/preview2.webp)
 
-![A close view with the wireframe: stairs, formwork props, railings and rebar](docs/preview3.webp)
+The building can be a rectangle, an L shape, a U shape, or have a podium (a tall first storey).
 
 ## Installation
 
@@ -130,6 +128,8 @@ Paired fields (for example Width/Depth) share one row in the panel.
 Under the building parameters the panel shows the resulting size: width × length × height in metres and the number of modules. Height = Floors × Floor Height (plus the podium extra).
 
 ## What is built
+
+![A close view with the wireframe: stairs, formwork props, railings and rebar](docs/preview3.webp)
 
 ### Objects
 
