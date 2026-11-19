@@ -42,7 +42,7 @@ The panel is in English. Switch Blender to Russian (**Edit → Preferences → I
 1. Set the building parameters (table below).
 2. Press **Rebuild**. The building appears in the `ConstructionBuilder` collection.
 3. Changed a parameter? Press **Rebuild** again: the old result is replaced by the new one.
-4. **Export FBX** saves everything to one file (and the ID mask PNG next to it), **Open Folder** opens the folder with it.
+4. **Export FBX** saves everything to one file (and the ID mask PNG next to it), **Open Folder** opens the folder with it. **Save Config** / **Load Config** keep the building's parameters in a `.json` file, so the building can be restored or given to someone.
 
 Parameters do not apply by themselves: until you press Rebuild, the scene keeps the previous version.
 
@@ -358,6 +358,16 @@ The `Single Mesh` checkbox (in the Export block) merges all parts into **one mes
 * The merge works on mesh data, not with the Join operator: that operator depends on the editor state.
 * Rebuild recreates `CB_Building` every time. Turn the checkbox off and press Rebuild to get the separate objects back, and `CB_Building` disappears.
 
+### Config (Save / Load)
+
+You set up a building and want to keep it or give it to someone: the `Config` box has two buttons.
+
+* **Save Config** writes all parameters to a `.json` file named like the FBX (the **File** field, for example `c10_8-8_L.json`) in the export folder.
+* **Load Config** opens a file browser, applies the chosen file and **rebuilds** the building. The other person gets exactly the same building (the seed is saved too).
+* The export folder is not saved, so a file from another computer does not touch your folder.
+* A file from an older or newer version is loaded too: unknown names are skipped, missing ones stay default. The message says how many parameters were applied.
+* A file that is not a config gives an error and changes nothing.
+
 ### Export
 
 * All objects are exported to one FBX file (meshes only). With `Single Mesh` that is one object, `CB_Building`.
@@ -374,7 +384,7 @@ Ideas for more construction-site feeling: a net on the facade, a construction ho
 
 * `blender_manifest.toml`: the extension description.
 * `builder.py`: geometry (shape, slabs, columns, rebar, walls, shafts, stairs, formwork, railings, lamps, holes, debris), UV packing, the ID mask, rebuild.
-* `operators.py`: properties, operators (Rebuild, Export FBX, Open Folder) and the panel.
+* `operators.py`: properties, operators (Rebuild, Export FBX, Open Folder, Save Config, Load Config) and the panel.
 * `translations.py`: the Russian translation of the interface.
 
 ## Limitations

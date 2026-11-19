@@ -3,6 +3,7 @@
 Русский: Свойства, операторы и панель в 3D Viewport для ConstructionBuilder.
 """
 
+import json
 import math
 import os
 import subprocess
@@ -914,6 +915,126 @@ class CB_OT_open_folder(bpy.types.Operator):
         return {"FINISHED"}
 
 
+CONFIG_SKIP = {"rna_type", "name", "export_dir"}  # not saved: the folder belongs to one computer / не сохраняются: папка принадлежит одному компьютеру
+
+
+def config_data(props):
+    """All building parameters as a JSON-ready dict (the export folder is left out).
+
+    Русский: Все параметры здания в виде словаря для JSON (папка экспорта не
+    входит).
+    """
+    values = {}
+    for prop in props.bl_rna.properties:
+        if prop.identifier in CONFIG_SKIP or prop.is_readonly:
+            continue
+        value = getattr(props, prop.identifier)
+        if getattr(prop, "array_length", 0):
+            value = [round(v, 6) if isinstance(v, float) else v for v in value]
+        elif isinstance(value, float):
+            value = round(value, 6)
+        values[prop.identifier] = value
+    return {"construction_builder": VERSION, "properties": values}
+
+
+def apply_config(props, data):
+    """Set the parameters from `config_data`'s dict; returns (applied, skipped).
+
+    Everything starts from the defaults, so the building equals the saved one even
+    if the file comes from another version (unknown names are skipped, missing ones
+    stay default). The export folder is not touched.
+
+    Русский: Выставляет параметры из словаря `config_data`; возвращает
+    (применено, пропущено). Всё начинается с умолчаний, поэтому здание равно
+    сохранённому, даже если файл от другой версии (неизвестные имена
+    пропускаются, отсутствующие остаются по умолчанию). Папка экспорта не
+    трогается.
+    """
+    for prop in props.bl_rna.properties:
+        if prop.identifier not in CONFIG_SKIP and not prop.is_readonly:
+            props.property_unset(prop.identifier)
+    applied = skipped = 0
+    for key, value in data.get("properties", {}).items():
+        prop = props.bl_rna.properties.get(key)
+        if prop is None or key in CONFIG_SKIP or prop.is_readonly:
+            skipped += 1
+            continue
+        try:
+            setattr(props, key, tuple(value) if getattr(prop, "array_length", 0) else value)
+            applied += 1
+        except (TypeError, ValueError, AttributeError):
+            skipped += 1
+    return applied, skipped
+
+
+def config_path(props):
+    """Where Save puts the config: the export folder, the File name with `.json`.
+
+    Русский: Куда Save кладёт конфиг: папка экспорта, имя из File с `.json`.
+    """
+    name = props.file_name.strip() or "ConstructionBuilder"
+    if name.lower().endswith(".fbx"):
+        name = name[:-4]
+    return os.path.join(export_folder(props), name + ".json")
+
+
+class CB_OT_save_config(bpy.types.Operator):
+    """Save all building parameters to a .json file next to the FBX
+
+    Русский: Сохранить все параметры здания в файл .json рядом с FBX.
+    """
+
+    bl_idname = "construction_builder.save_config"
+    bl_label = "Save Config"
+    bl_description = "Save all building parameters to a .json file named like the FBX, in the export folder"
+
+    def execute(self, context):
+        props = context.scene.construction_builder
+        path = config_path(props)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(config_data(props), f, indent=2, ensure_ascii=False)
+        self.report({"INFO"}, f"{_rpt('Saved')} {path}")
+        return {"FINISHED"}
+
+
+class CB_OT_load_config(bpy.types.Operator):
+    """Load building parameters from a .json file and rebuild
+
+    Русский: Загрузить параметры здания из файла .json и пересобрать.
+    """
+
+    bl_idname = "construction_builder.load_config"
+    bl_label = "Load Config"
+    bl_description = "Load the building parameters from a .json file and rebuild the building"
+    bl_options = {"REGISTER", "UNDO"}
+
+    filepath: StringProperty(subtype="FILE_PATH")
+    filter_glob: StringProperty(default="*.json", options={"HIDDEN"})
+
+    def invoke(self, context, event):
+        self.filepath = os.path.join(export_folder(context.scene.construction_builder), "")
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        try:
+            with open(bpy.path.abspath(self.filepath), encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data.get("properties"), dict):
+                raise ValueError("no properties")
+        except (OSError, ValueError, AttributeError):
+            self.report({"ERROR"}, _rpt("Not a ConstructionBuilder config"))
+            return {"CANCELLED"}
+        applied, skipped = apply_config(context.scene.construction_builder, data)
+        bpy.ops.construction_builder.rebuild()
+        message = f"{_rpt('Loaded')} {os.path.basename(self.filepath)}: {applied} {_rpt('parameters')}"
+        if skipped:
+            message += f", {skipped} {_rpt('skipped')}"
+        self.report({"INFO"}, message)
+        return {"FINISHED"}
+
+
 def _pair(layout, props, label, first, second, first_index=-1, second_index=-1):
     """A label and two input fields on ONE row, e.g. Cut (Width/Depth).
 
@@ -1126,6 +1247,12 @@ class CB_PT_main(bpy.types.Panel):
         row.operator("construction_builder.rebuild", icon="FILE_REFRESH")
 
         box = layout.box()
+        box.label(text="Config", icon="PRESET")
+        row = box.row(align=True)
+        row.operator("construction_builder.save_config", icon="FILE_TICK")
+        row.operator("construction_builder.load_config", icon="FILE_FOLDER")
+
+        box = layout.box()
         box.label(text="Export", icon="EXPORT")
         box.prop(props, "single_mesh")
         box.prop(props, "export_one_material")
@@ -1142,6 +1269,8 @@ classes = (
     CB_OT_rebuild,
     CB_OT_export_fbx,
     CB_OT_open_folder,
+    CB_OT_save_config,
+    CB_OT_load_config,
     CB_PT_main,
 )
 

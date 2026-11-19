@@ -4,6 +4,16 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.27.0
+
+**English**
+
+* **Save Config / Load Config** (the `Config` box above Export): **Save Config** writes all building parameters to a `.json` file named like the FBX (the `File` field, for example `c10_8-8_L.json`) in the export folder. **Load Config** opens a file browser, applies the file and rebuilds the building. Use it to keep a building or to give it to someone: the other person loads the file and gets exactly the same building (checked bit-for-bit on a U-shaped building with a podium and an unfinished part: the loaded geometry equals the saved one). The export folder is not saved, so a file from another computer does not touch your folder. A file from another version is loaded too: unknown names are skipped, missing ones stay default, and the result shows how many parameters were applied. A file that is not a config gives an error and changes nothing.
+
+**Русский**
+
+* **Save Config / Load Config** (блок `Config` над Export): **Save Config** записывает все параметры здания в файл `.json` с таким же именем, как у FBX (поле `File`, например `c10_8-8_L.json`), в папке экспорта. **Load Config** открывает выбор файла, применяет его и пересобирает здание. Так можно сохранить здание или отдать его кому-то: другой человек загружает файл и получает точно такое же здание (проверено побитово на П-образном здании со стилобатом и недостроенной частью: загруженная геометрия равна сохранённой). Папка экспорта не сохраняется, поэтому файл с другого компьютера вашу папку не трогает. Файл от другой версии тоже загружается: неизвестные имена пропускаются, отсутствующие остаются по умолчанию, а в сообщении видно, сколько параметров применено. Файл, который не конфиг, даёт ошибку и ничего не меняет.
+
 ## 0.26.0
 
 **English**

@@ -323,6 +323,18 @@ LABELS = {
     "Height (Min/Max)": "Высота (мин/макс)",
     "Width (Min/Max)": "Ширина (мин/макс)",
     "Version": "Версия",
+    "Config": "Конфиг",
+    "Save Config": "Сохранить конфиг",
+    "Load Config": "Загрузить конфиг",
+    "Save all building parameters to a .json file named like the FBX, in the export folder": "Сохранить все "
+    "параметры здания в файл .json с тем же именем, что у FBX, в папке экспорта",
+    "Load the building parameters from a .json file and rebuild the building": "Загрузить параметры здания "
+    "из файла .json и пересобрать здание",
+    "Saved": "Сохранено",
+    "Loaded": "Загружено",
+    "parameters": "параметров",
+    "skipped": "пропущено",
+    "Not a ConstructionBuilder config": "Это не конфиг ConstructionBuilder",
     "Size": "Размер",
     "m": "м",
     "modules": "модулей",
