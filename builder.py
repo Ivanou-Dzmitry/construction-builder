@@ -1015,7 +1015,9 @@ def build_debris(props, offset):
     in the middle of the building). Floor k is the floor of storey k, the same
     numbering as `wall_floors`: 1 is the ground, `floors` + 1 is the roof. The size is random inside the ranges
     set in the panel. The box is kept inside its module, inset from the module
-    edges, so it stays clear of the columns and walls; shaft holes get none.
+    edges, so it stays clear of the columns and walls; shaft holes get none. A module
+    whose floor stands under propped slabs (formwork on, see `formwork_levels`) gets
+    none either, so no box crosses the props.
     A box has no bottom face: it stands on the slab or the ground. Every choice is seeded per
     (floor, module), so a Rebuild repeats it and changing other settings does
     not reshuffle the rest.
@@ -1026,7 +1028,9 @@ def build_debris(props, offset):
     здания меньше). Этаж k это пол этажа k, нумерация как у `wall_floors`: 1
     земля, `floors` + 1 крыша. Размер случайный в диапазонах из панели. Бокс
     стоит внутри модуля с отступом от краёв, поэтому не задевает колонны и
-    стены; над дырами шахт боксов нет. Нижней грани нет: бокс стоит на плите
+    стены; над дырами шахт боксов нет. В модуле, где этаж стоит под плитой со
+    стойками (опалубка включена, см. `formwork_levels`), боксов тоже нет, чтобы
+    ни один не пересекал стойки. Нижней грани нет: бокс стоит на плите
     или на земле. Все выборы привязаны к (этаж, модуль) и зерну, поэтому
     Rebuild повторяет результат, а смена других настроек остальное не
     перемешивает.
@@ -1052,6 +1056,8 @@ def build_debris(props, offset):
         z = slab_top(props, floor - 1)  # floor of storey `floor`; 1 = ground / пол этажа `floor`; 1 = земля
         for i, j in cells:
             if floor > built[(i, j)] + 1:  # above the roof of this part / выше крыши этой части
+                continue
+            if props.formwork and propped_from(props, built[(i, j)]) <= floor <= built[(i, j)]:  # the props stand here / здесь стоят стойки
                 continue
             if _roll(seed, "debris", floor, i, j) >= props.debris_factor * weights[(i, j)]:
                 continue

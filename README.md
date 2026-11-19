@@ -311,7 +311,7 @@ Boxes of different height and length on the floors, so the frame looks lived-in 
 * Every floor module on the chosen floors (`Floors`) gets at most one box, which appears with probability `Factor` × the module weight (fewer in the middle).
 * Floors are numbered like walls: 1 is the ground, 2 is the floor above the first storey, the last number (floors + 1) is the roof.
 * The size is random within ranges: height 0.5-2 m, length 1-2 m, width 0.4-1 m. A box can lie along X or along Y. A swapped Min and Max does no harm.
-* The box stands inside its module, inset from the edges, so it does not cross columns and walls. No boxes in the modules under a shaft or over a hole. One box per module, so boxes do not intersect each other.
+* The box stands inside its module, inset from the edges, so it does not cross columns and walls. No boxes in the modules under a shaft or over a hole. **No boxes among the formwork props:** like the lamps, a module gets no debris on a floor where props stand (the floors under the top `Top Slabs` slabs, with `Formwork Props` on), so no box crosses a tripod. One box per module, so boxes do not intersect each other.
 * **No bottom face**, the other five faces are flat (the bottom is hidden in the slab or the ground).
 * Everything is tied to `Seed` and to the module: Rebuild repeats the result, changing other settings does not reshuffle the debris.
 * The object is part of the shared UV map and of the FBX.

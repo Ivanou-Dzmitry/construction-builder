@@ -4,6 +4,16 @@ The version is set in `blender_manifest.toml` (the `version` field) and shown at
 
 Версия задаётся в `blender_manifest.toml` (поле `version`) и показывается вверху панели. Любое изменение кода поднимает версию, запись добавляется сюда. Каждая запись написана на английском и на русском.
 
+## 0.28.0
+
+**English**
+
+* **No debris among the formwork props.** A box of debris used to stand right among the props and cross their tripods. Now, like the lamps, a module gets no debris on a floor where formwork props stand (the floors under the top `Top Slabs` slabs of its part, when `Formwork Props` is on). The other floors keep their debris. With the formwork off the debris did not change (bit-for-bit comparison on 3 configurations); with it on, the boxes in propped floors are gone (0 left in the test).
+
+**Русский**
+
+* **Мусора нет среди стоек опалубки.** Бокс мусора раньше мог стоять прямо среди стоек и пересекать их треноги. Теперь, как и у ламп, в модуле на этаже со стойками опалубки мусора нет (этажи под верхними `Top Slabs` плитами его части, когда включены `Formwork Props`). На остальных этажах мусор остаётся. При выключенной опалубке мусор не изменился (побитовое сравнение на 3 конфигурациях); при включённой боксов на этажах со стойками нет (в тесте осталось 0).
+
 ## 0.27.0
 
 **English**
